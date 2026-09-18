@@ -1,0 +1,17 @@
+Django==6.1.1
+djangorestframework==3.18.1
+djangorestframework_simplejwt==5.5.1
+django-cors-headers==4.9.0
+django-filter==26.1
+drf-spectacular==0.30.0
+python-barcode==0.16.1
+pillow==12.3.0
+reportlab==5.0.1
+openpyxl==3.1.5
+
+# Production server and infrastructure
+gunicorn==23.0.0
+psycopg[binary]==3.2.12
+dj-database-url==3.0.1
+whitenoise==6.11.0
+python-dotenv==1.2.1

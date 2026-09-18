@@ -1,0 +1,26 @@
+# Everything listed here is kept OUT of the image Docker builds.
+# Smaller build context = faster builds, smaller images, fewer accidents.
+
+# Secrets must never be baked into an image - they are injected at run time.
+.env
+
+# Local Python bits that would clash with the container's own
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local data that belongs in a volume, not in the image
+db.sqlite3
+media/
+staticfiles/
+
+# The React app is built by frontend/Dockerfile; Django has no use for it
+frontend/
+
+# Development noise
+.git/
+.gitignore
+.idea/
+.DS_Store
+*.md

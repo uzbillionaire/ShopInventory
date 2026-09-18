@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+db.sqlite3
+media/
+staticfiles/
+.env
+
+node_modules/
+frontend/dist/
+
+# Generated from deploy/nginx-tls.conf with your real domain filled in
+deploy/nginx-tls.live.conf
