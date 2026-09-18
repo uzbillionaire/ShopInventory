@@ -45,14 +45,24 @@ services:
       - '8000' # visible to nginx inside the private network, not to the outside
 
   # ---------------- nginx + the React app ----------------
-  nginx:
+  # Deliberately NOT called "nginx": this container joins a network shared with
+  # the cinevault project, which already has a service by that name and finds it
+  # via DNS. Two containers answering to "nginx" would break both apps at random.
+  shopproxy:
     build:
       context: ./frontend
     restart: unless-stopped
-    ports:
-      # "host:container" - the only doors open to the internet.
-      - '80:80'
-      - '443:443'
+    # No "ports:" here. Caddy already owns 80 and 443 on this server and acts as
+    # the public doorman; publishing them again would fail with "port is already
+    # allocated". We only expose port 80 to other containers on the shared network.
+    expose:
+      - '80'
+    networks:
+      default: {} # private network with web and db
+      edge:
+        aliases:
+          # The name Caddy will use in its reverse_proxy line.
+          - shopinventory-nginx
     volumes:
       # Mounted rather than baked in, so editing the config needs a restart, not a rebuild.
       # Swap nginx.conf for nginx-tls.conf once certificates exist.
@@ -64,14 +74,27 @@ services:
       - web
 
   # ---------------- Let's Encrypt certificates ----------------
-  # "profiles" keeps this out of `docker compose up`. You run it by hand:
-  #   docker compose run --rm certbot certonly --webroot -w /var/www/certbot -d your-domain.com
+  # NOT NEEDED on a server where Caddy is the public proxy: Caddy obtains and
+  # renews certificates by itself. This is kept only for the case where this app
+  # is the sole thing on a server and nginx faces the internet directly.
+  # "profiles" keeps it out of `docker compose up`; it never runs unless asked.
   certbot:
     image: certbot/certbot:latest
     profiles: ['certbot']
     volumes:
       - certbot-www:/var/www/certbot
       - certbot-certs:/etc/letsencrypt
+
+networks:
+  # Created by this project: db, web and nginx talk to each other privately here.
+  default:
+  # "external: true" means Docker must NOT create this - it already exists,
+  # made by the cinevault project. Joining it lets Caddy reach our nginx by name.
+  # Confirm the exact name with:  docker inspect cinevault-caddy-1 \
+  #   --format '{{range $$k,$$v := .NetworkSettings.Networks}}{{$$k}} {{end}}'
+  edge:
+    external: true
+    name: ${EDGE_NETWORK:-cinevault_default}
 
 volumes:
   pgdata:

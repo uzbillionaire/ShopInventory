@@ -11,13 +11,17 @@ need the "Updating" and "Backups" sections.
 ```
             internet
                |
-          [ nginx ]  :80 / :443     <- the only container exposed publicly
-           /      \
-   React app    /api/, /admin/, /static/
-  (static files)        |
-                    [ web ]  gunicorn + Django
-                        |
-                     [ db ]  PostgreSQL     <- private, no public port
+     [ caddy ]  :80 / :443          <- belongs to the cinevault project,
+       |                               the only container with public ports
+       |  (shared docker network)
+       v
+  [ shopproxy ]  nginx, no public port
+      /      \
+ React app   /api/, /admin/, /static/
+(static files)       |
+                 [ web ]  gunicorn + Django
+                     |
+                  [ db ]  PostgreSQL     <- private, no public port
 ```
 
 Three containers, described by `docker-compose.yml`:
@@ -26,7 +30,9 @@ Three containers, described by `docker-compose.yml`:
 |---|---|---|
 | `db` | `postgres:17-alpine` | stores the data |
 | `web` | `Dockerfile` | runs Django under gunicorn |
-| `nginx` | `frontend/Dockerfile` | serves the React app, forwards API calls, handles https |
+| `shopproxy` | `frontend/Dockerfile` | serves the React app, forwards API calls to `web` |
+
+HTTPS is handled by Caddy, which is **not** part of this project. See Part 5.
 
 Two named volumes hold everything that must survive a restart: `pgdata`
 (the database) and `media` (uploaded product pictures).
@@ -89,6 +95,13 @@ ignores it entirely — Docker Compose injects the values directly.
 ---
 
 ## Part 2 — Prepare the server
+
+**Skip this part for the current server** — it already runs Docker and hosts the
+cinevault project. It is written for the next time you start from a blank VPS.
+
+On a shared server, do NOT run `ufw enable` without first allowing the ports the
+existing project needs; you would lock out the other site (and possibly
+yourself).
 
 SSH in as root, then:
 
@@ -177,50 +190,129 @@ Visit `http://your-domain.com` — the app should load.
 
 ---
 
-## Part 5 — Turn on https
+## Part 5 — Publish through the existing Caddy
 
-Browsers block the camera on plain http, so the barcode scanner will not work
-until this is done. Certificates from Let's Encrypt are free.
+**This server is shared.** Another project (cinevault) already runs here, and its
+Caddy container owns ports 80 and 443 for the whole machine. Our app must sit
+behind it, exactly as cinevault's own nginx does:
+
+```
+internet → [ cinevault-caddy-1 ] :80/:443      ← handles all TLS
+              ├── cinevault domain  → nginx:80                 (theirs)
+              └── shop hostname     → shopinventory-nginx:80   (ours)
+```
+
+Caddy obtains and renews Let's Encrypt certificates by itself, so there is no
+certbot to run and no renewal cron job to remember.
+
+### 5.1 Pick a hostname
+
+With no domain of your own, `sslip.io` provides one free: any hostname
+containing an IP address resolves to that IP, with no signup. Caddy can get a
+real certificate for it, which matters because **browsers only allow camera
+access over https** — without it the barcode scanner will not work.
 
 ```bash
-# 1. Ask for a certificate. nginx must already be running on port 80.
-docker compose run --rm certbot certonly \
-  --webroot -w /var/www/certbot \
-  -d your-domain.com -d www.your-domain.com \
-  --email you@example.com --agree-tos --no-eff-email
-
-# 2. Point nginx at the https config
-cp deploy/nginx-tls.conf deploy/nginx-tls.live.conf
-sed -i 's/example\.com/your-domain.com/g' deploy/nginx-tls.live.conf
+IP=$(curl -4 -s ifconfig.me)
+HOST="shop.${IP//./-}.sslip.io"
+echo "$HOST"          # e.g. shop.203-0-113-10.sslip.io
 ```
 
-Edit `docker-compose.yml` and change the nginx config mount to:
-
-```yaml
-      - ./deploy/nginx-tls.live.conf:/etc/nginx/conf.d/default.conf:ro
-```
-
-Then tighten Django and restart:
+Check that it resolves back to your server before going further:
 
 ```bash
-sed -i 's/^DJANGO_SECURE_SSL=.*/DJANGO_SECURE_SSL=1/' .env
-docker compose up -d
+getent hosts "$HOST"
 ```
 
-Confirm `https://your-domain.com` works and that http redirects to it. Only
-then set `DJANGO_HSTS_SECONDS=31536000` in `.env` and `docker compose up -d`
-again — HSTS tells browsers "never use http for this domain again" and is hard
-to undo, so switch it on last.
-
-**Renewal.** Certificates last 90 days. Add a monthly cron job:
+### 5.2 Configure this app
 
 ```bash
-crontab -e
+cd /var/www/ShopInventory
+cp .env.example .env
+nano .env
 ```
 
-```cron
-0 3 1 * * cd /home/deploy/ShopInventory && docker compose run --rm certbot renew && docker compose exec -T nginx nginx -s reload
+Set these (the rest as in Part 4):
+
+| Variable | Value |
+|---|---|
+| `DJANGO_ALLOWED_HOSTS` | the `$HOST` value from above |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://` + that host |
+| `DJANGO_SECURE_SSL` | `1` — Caddy provides https from the first request |
+| `EDGE_NETWORK` | `cinevault_default` |
+
+Start it. Nothing is published to the internet yet, so this cannot disturb
+cinevault:
+
+```bash
+docker compose up -d --build
+docker compose ps        # db, web, shopproxy should all be running
 ```
+
+### 5.3 Add the site to Caddy
+
+Back up first — this file belongs to the other project:
+
+```bash
+cp /opt/cinevault/docker/Caddyfile /opt/cinevault/docker/Caddyfile.bak
+```
+
+Append a block for our hostname:
+
+```bash
+cat >> /opt/cinevault/docker/Caddyfile <<EOF
+
+# ShopInventory - separate project, same server.
+${HOST} {
+        reverse_proxy shopinventory-nginx:80
+}
+EOF
+```
+
+`shopinventory-nginx` is the network alias set in our `docker-compose.yml`.
+Our service is called `shopproxy`, *not* `nginx`, because cinevault's Caddy
+already resolves `nginx` to its own container — two containers answering to the
+same name would send cinevault's traffic to the wrong app at random.
+
+Check the syntax before applying it:
+
+```bash
+docker exec cinevault-caddy-1 caddy validate --config /etc/caddy/Caddyfile
+```
+
+Only if that says "Valid configuration", reload:
+
+```bash
+docker exec cinevault-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+```
+
+`reload` swaps the config in place without dropping connections, so cinevault
+stays up. If validation fails, restore the backup and change nothing:
+
+```bash
+cp /opt/cinevault/docker/Caddyfile.bak /opt/cinevault/docker/Caddyfile
+```
+
+### 5.4 Confirm
+
+```bash
+curl -sI "https://${HOST}/" | head -3        # expect HTTP/2 200
+docker logs --tail 20 cinevault-caddy-1      # certificate issued
+```
+
+Then open `https://$HOST` in a browser and check cinevault's own site still
+works. Certificates usually arrive within seconds; if not, the cause is almost
+always DNS or a blocked port 80.
+
+Once https is confirmed, you may set `DJANGO_HSTS_SECONDS=31536000` in `.env`
+and `docker compose up -d`. Do this last — HSTS tells browsers "never use http
+for this host again" and is hard to undo.
+
+### Moving to a real domain later
+
+Point the domain's `A` record at the server, then change the hostname in the
+Caddyfile block and in `DJANGO_ALLOWED_HOSTS` / `DJANGO_CSRF_TRUSTED_ORIGINS`.
+Reload Caddy and restart the app. Nothing else changes.
 
 ---
 
