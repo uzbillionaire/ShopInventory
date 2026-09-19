@@ -63,9 +63,14 @@ class SizeEntry(models.Model):
 
 
 class Sale(models.Model):
+    CASH, CARD = 'cash', 'card'
+    PAYMENT_CHOICES = [(CASH, _('Cash')), (CARD, _('Card'))]
+
     size_entry = models.ForeignKey(SizeEntry, on_delete=models.PROTECT, related_name='sales', verbose_name=_('size entry'))
     sold_price = models.PositiveIntegerField(_('sold price'))
     sold_at = models.DateTimeField(_('sold at'), auto_now_add=True, db_index=True)
+    # Cash is what should be in the drawer at closing; card went straight to the bank.
+    payment = models.CharField(_('payment'), max_length=4, choices=PAYMENT_CHOICES, default=CASH)
 
     class Meta:
         ordering = ['-sold_at']

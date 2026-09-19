@@ -36,12 +36,19 @@ def daily(day):
         'sales': stats.sales_summary(sales),
         'sales_list': list(sales),
         'by_brand': stats.best_sellers(sales, 'size_entry__batch__brand', limit=50),
+        'by_payment': by_payment(sales),
         'received': received_rows,
         'received_summary': {
             'pairs': sum(r['quantity'] for r in received_rows),
             'value': sum(r['quantity'] * r['bought_price'] for r in received_rows),
         },
     }
+
+
+def by_payment(sales):
+    """Money taken per payment type; cash is what the drawer should hold."""
+    totals = {row['payment']: row['total'] for row in sales.order_by().values('payment').annotate(total=Sum('sold_price'))}
+    return {method: totals.get(method, 0) for method, _label in Sale.PAYMENT_CHOICES}
 
 
 def days(start, end):

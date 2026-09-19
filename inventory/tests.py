@@ -250,6 +250,18 @@ class SellTests(ApiTestCase):
         self.assertEqual(self.entry('41').quantity, 0)
         self.assertEqual(Sale.objects.count(), 2)
 
+    def test_payment_defaults_to_cash_and_accepts_card(self):
+        self.assertEqual(self.sell(self.code).data['sale']['payment'], 'cash')
+        card = self.client.post(f'/api/entries/{self.code}/sell/', {'sold_price': 300_000, 'payment': 'card'}, format='json')
+        self.assertEqual(card.data['sale']['payment'], 'card')
+        bad = self.client.post(f'/api/entries/{self.code}/sell/', {'sold_price': 300_000, 'payment': 'crypto'}, format='json')
+        self.assertEqual(bad.status_code, 400)
+
+    def test_daily_report_splits_money_by_payment(self):
+        self.sell(self.code, 300_000)
+        self.client.post(f'/api/entries/{self.code}/sell/', {'sold_price': 280_000, 'payment': 'card'}, format='json')
+        self.assertEqual(self.client.get('/api/reports/daily/').data['by_payment'], {'cash': 300_000, 'card': 280_000})
+
     def test_invalid_price(self):
         self.assertEqual(self.sell(self.code, -1).status_code, 400)
         self.assertEqual(self.client.post(f'/api/entries/{self.code}/sell/', {}, format='json').status_code, 400)
@@ -408,8 +420,9 @@ class DailyReportTests(ApiTestCase):
         self.assertIn(f'daily-report-{self.today}', response['Content-Disposition'])
         book = load_workbook(io.BytesIO(response.content))
         sales, received = book.worksheets
-        self.assertEqual(sales.max_row, 4)  # header, 2 sales, total
-        self.assertEqual(sales.cell(4, 7).value, 40_000)
+        self.assertEqual(sales.max_row, 6)  # header, 2 sales, cash, card, total
+        self.assertEqual((sales.cell(4, 6).value, sales.cell(5, 6).value), (sales.cell(6, 6).value, 0))  # all sold for cash
+        self.assertEqual(sales.cell(6, 7).value, 40_000)
         self.assertEqual(received.cell(received.max_row, 6).value, 1_250_000)
 
     def test_backfilled_restocks_exist_for_new_stock(self):

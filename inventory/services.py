@@ -95,11 +95,11 @@ def add_stock(brand, bought_price, rows, picture=None):
 
 
 @transaction.atomic
-def sell_one(entry, sold_price):
+def sell_one(entry, sold_price, payment=Sale.CASH):
     updated = SizeEntry.objects.filter(pk=entry.pk, quantity__gt=0).update(quantity=F('quantity') - 1)
     if not updated:
         raise OutOfStock
-    sale = Sale.objects.create(size_entry=entry, sold_price=sold_price)
+    sale = Sale.objects.create(size_entry=entry, sold_price=sold_price, payment=payment)
     entry.refresh_from_db(fields=['quantity'])
     return sale
 

@@ -65,6 +65,8 @@ export default function DailyReport() {
               <dl className="figures">
                 <div><dt>{t('revenue')}</dt><dd>{som(r.sales.revenue, unit)}</dd></div>
                 <div><dt>{t('pairsSold')}</dt><dd>{spaced(r.sales.units)}</dd></div>
+                <div><dt>{t('cashInDrawer')}</dt><dd>{som(r.by_payment.cash, unit)}</dd></div>
+                <div><dt>{t('paidByCard')}</dt><dd>{som(r.by_payment.card, unit)}</dd></div>
                 <div><dt>{t('receivedPairs')}</dt><dd>{spaced(r.received_summary.pairs)}</dd></div>
                 <div><dt>{t('receivedValue')}</dt><dd>{som(r.received_summary.value, unit)}</dd></div>
               </dl>
@@ -87,7 +89,7 @@ export default function DailyReport() {
                           <SizeChip size={sale.size} />
                           <span>
                             <span className="stock-brand">{sale.brand}</span>
-                            <span className="stock-meta">{new Date(sale.sold_at).toTimeString().slice(0, 5)}</span>
+                            <span className="stock-meta">{new Date(sale.sold_at).toTimeString().slice(0, 5)} · {t(sale.payment)}</span>
                           </span>
                           <span className="report-day-money">
                             <strong>{som(sale.sold_price, unit)}</strong>

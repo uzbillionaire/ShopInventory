@@ -94,6 +94,8 @@ main { max-width: 760px; margin: 0 auto; padding: 4px var(--gutter) 0; }
 .back:hover { color: var(--ink); }
 
 .section { margin-top: 32px; }
+.payment-choice { margin: 0; }
+.segmented.payment-choice button { flex: 1; min-height: 52px; font-size: 17px; }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .home-actions { display: grid; gap: 10px; }
 .home-actions .button { gap: 10px; }

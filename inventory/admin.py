@@ -30,7 +30,8 @@ class SizeEntryAdmin(admin.ModelAdmin):
 
 @admin.register(Sale)
 class SaleAdmin(admin.ModelAdmin):
-    list_display = ['sold_at', 'size_entry', 'sold_price']
+    list_display = ['sold_at', 'size_entry', 'sold_price', 'payment']
+    list_filter = ['payment']
     search_fields = ['size_entry__code', 'size_entry__batch__brand']
     date_hierarchy = 'sold_at'
     list_select_related = ['size_entry__batch']

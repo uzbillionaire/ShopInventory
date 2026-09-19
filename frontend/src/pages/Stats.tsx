@@ -106,7 +106,7 @@ export default function Stats() {
                 <div><dt>{t('stockAtCost')}</dt><dd>{som(s.inventory.value, unit)}</dd></div>
               </dl>
 
-              <section className="section">
+              {start !== end && <section className="section">
                 <h2 className="section-title">{t('salesOverTime')}</h2>
                 <div className="chart-bars">
                   {s.timeline.points.map((p, index) => {
@@ -131,7 +131,7 @@ export default function Stats() {
                     ? `${bucketLabel(point.date, s.timeline.step)}: ${som(point.revenue, unit)}, ${t('profitKey').toLowerCase()} ${som(point.profit, unit)}`
                     : <span className="muted">{t('tapBar')}</span>}
                 </p>
-              </section>
+              </section>}
 
               <div className="two-col section">
                 <RankingList title={t('bestBrands')} rows={s.best_brands} />

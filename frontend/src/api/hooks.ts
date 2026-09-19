@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
-import type { BrandGroup, DailyReport, Page, ReportDay, RestockResult, Sale, SizeEntry, SizeEntryDetail, Stats } from './types'
+import type { BrandGroup, DailyReport, Page, Payment, ReportDay, RestockResult, Sale, SizeEntry, SizeEntryDetail, Stats } from './types'
 
 function query(params: Record<string, string | number | boolean | undefined | null>) {
   const search = new URLSearchParams()
@@ -97,10 +97,10 @@ export function useAddStock() {
 export function useSell(code: string) {
   const invalidate = useInvalidateStock()
   return useMutation({
-    mutationFn: (soldPrice: number) =>
+    mutationFn: ({ soldPrice, payment }: { soldPrice: number; payment: Payment }) =>
       api<{ sale: Sale; entry: SizeEntry }>(`/entries/${encodeURIComponent(code)}/sell/`, {
         method: 'POST',
-        body: { sold_price: soldPrice },
+        body: { sold_price: soldPrice, payment },
       }),
     onSuccess: invalidate,
   })

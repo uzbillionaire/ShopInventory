@@ -58,7 +58,7 @@ class SaleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Sale
-        fields = ['id', 'code', 'brand', 'size', 'bought_price', 'sold_price', 'profit', 'sold_at']
+        fields = ['id', 'code', 'brand', 'size', 'bought_price', 'sold_price', 'profit', 'payment', 'sold_at']
 
 
 class SizeEntryDetailSerializer(SizeEntrySerializer):
@@ -135,6 +135,7 @@ class RestockResultSerializer(serializers.Serializer):
 
 class SellSerializer(serializers.Serializer):
     sold_price = serializers.IntegerField(min_value=0)
+    payment = serializers.ChoiceField(choices=Sale.PAYMENT_CHOICES, default=Sale.CASH)
 
 
 class SellResultSerializer(serializers.Serializer):

@@ -160,7 +160,7 @@ class SizeEntryViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, mixin
         data = SellSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         try:
-            sale = services.sell_one(entry, data.validated_data['sold_price'])
+            sale = services.sell_one(entry, data.validated_data['sold_price'], data.validated_data['payment'])
         except services.OutOfStock:
             return Response({'detail': _('This size is sold out.')}, status=status.HTTP_409_CONFLICT)
         body = SellResultSerializer({'sale': sale, 'entry': entry}, context={'request': request})
@@ -259,11 +259,11 @@ class ExportView(APIView):
             name = f'inventory-{timezone.localdate():%Y-%m-%d}'
         else:
             start, end, _query = _date_range(request, default_days=365)
-            headers = [_('Date'), _('Code'), _('Brand'), _('Size'), _('Bought price'), _('Sold price'), _('Profit')]
+            headers = [_('Date'), _('Code'), _('Brand'), _('Size'), _('Bought price'), _('Sold price'), _('Profit'), _('Payment')]
             sales = Sale.objects.select_related('size_entry__batch').filter(sold_at__date__gte=start, sold_at__date__lte=end)
             rows = [
                 [timezone.localtime(s.sold_at).strftime('%Y-%m-%d %H:%M'), s.size_entry.code, s.size_entry.batch.brand,
-                 s.size_entry.size, s.size_entry.batch.bought_price, s.sold_price, s.profit]
+                 s.size_entry.size, s.size_entry.batch.bought_price, s.sold_price, s.profit, s.get_payment_display()]
                 for s in sales.order_by('sold_at')
             ]
             name = f'sales-{start:%Y-%m-%d}-{end:%Y-%m-%d}'
@@ -334,11 +334,14 @@ class DailyReportExportView(APIView):
 
         sales = book.active
         sales.title = _('Sales')
-        sales.append([_('Time'), _('Code'), _('Brand'), _('Size'), _('Bought price'), _('Sold price'), _('Profit')])
+        sales.append([_('Time'), _('Code'), _('Brand'), _('Size'), _('Bought price'), _('Sold price'), _('Profit'), _('Payment')])
         for sale in report['sales_list']:
             entry = sale.size_entry
             sales.append([timezone.localtime(sale.sold_at).strftime('%H:%M'), entry.code, entry.batch.brand, entry.size,
-                          entry.batch.bought_price, sale.sold_price, sale.profit])
+                          entry.batch.bought_price, sale.sold_price, sale.profit, sale.get_payment_display()])
+        paid = report['by_payment']
+        sales.append([_('Cash'), '', '', '', '', paid['cash']])
+        sales.append([_('Card'), '', '', '', '', paid['card']])
         totals = report['sales']
         sales.append([_('Total'), '', '', totals['units'], totals['cost'], totals['revenue'], totals['profit']])
 

@@ -1,10 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router'
 import { useEntry, useSell } from '../api/hooks'
+import type { Payment } from '../api/types'
 import { BackIcon } from '../components/Icons'
 import { ErrorNotice, Loading, MoneyInput, SizeChip, useToast } from '../components/ui'
-import { useI18n } from '../i18n'
+import { useI18n, type MessageKey } from '../i18n'
 import { parseMoney, som, spaced } from '../lib/format'
+
+const PAYMENTS: [Payment, MessageKey][] = [['cash', 'cash'], ['card', 'card']]
 
 export default function Sell() {
   const { code = '' } = useParams()
@@ -15,6 +18,7 @@ export default function Sell() {
   const sell = useSell(code)
   const [price, setPrice] = useState('')
   const [missing, setMissing] = useState(false)
+  const [payment, setPayment] = useState<Payment>('cash')
 
   if (entry.isPending) return <Loading />
   if (entry.isError) return <ErrorNotice error={entry.error} onRetry={() => entry.refetch()} />
@@ -31,7 +35,7 @@ export default function Sell() {
       setMissing(true)
       return
     }
-    sell.mutate(amount, {
+    sell.mutate({ soldPrice: amount, payment }, {
       onSuccess: ({ entry: updated }) => {
         navigate(`/e/${e.code}`, { replace: true })
         toast({ message: t('soldToast', { size: updated.size, left: updated.quantity }) })
@@ -71,6 +75,14 @@ export default function Sell() {
           <p className={`margin-preview${margin === null ? '' : margin >= 0 ? ' gain' : ' loss'}`} aria-live="polite">
             {margin !== null && t(margin >= 0 ? 'profit' : 'loss', { amount: `${spaced(Math.abs(margin))} ${unit}` })}
           </p>
+        </div>
+        <div className="field">
+          <span className="field-label" id="payment-label">{t('paymentType')}</span>
+          <div className="segmented payment-choice" role="group" aria-labelledby="payment-label">
+            {PAYMENTS.map(([value, key]) => (
+              <button key={value} type="button" aria-pressed={payment === value} onClick={() => setPayment(value)}>{t(key)}</button>
+            ))}
+          </div>
         </div>
         <button type="submit" className="button sell block" disabled={sell.isPending}>
           {sell.isPending ? t('saving') : t('saveSale')}
