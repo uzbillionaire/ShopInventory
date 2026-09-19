@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { CameraIcon } from '../components/Icons'
 import { useI18n, type MessageKey } from '../i18n'
+import { scanFeedback } from '../lib/feedback'
 
 // Same alphabet as inventory/models.py: no 0/O or 1/I.
 const CODE_PATTERN = /^[A-HJ-NP-Z2-9]{10}$/
@@ -74,7 +75,7 @@ export default function Scan() {
           seen.set(code, count)
           if (count < 2) return
           setCamera('found')
-          if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(60)
+          scanFeedback()
           stop()
           navigate(`/e/${code}`)
         })

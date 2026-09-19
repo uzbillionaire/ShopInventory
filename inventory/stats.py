@@ -38,12 +38,6 @@ def best_sellers(sales, field, limit=5):
     return rows
 
 
-def average_days_to_sell(sales):
-    pairs = sales.values_list('sold_at', 'size_entry__batch__date_added')
-    days = [(sold_at - added).total_seconds() / 86400 for sold_at, added in pairs]
-    return sum(days) / len(days) if days else None
-
-
 def slow_moving(days):
     """Lines still in stock, older than `days`, with no sale in that window."""
     cutoff = timezone.now() - timedelta(days=days)

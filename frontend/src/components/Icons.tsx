@@ -19,7 +19,9 @@ export function ShoeMark({ size = 22 }: { size?: number }) {
   )
 }
 
+export const HomeIcon = (p: IconProps) => <Stroke {...p}><path d="M4 10.5 12 4l8 6.5V20h-5v-6H9v6H4z" /></Stroke>
 export const ListIcon = (p: IconProps) => <Stroke {...p}><path d="M4 7h16M4 12h16M4 17h16" /></Stroke>
+export const ChevronIcon = (p: IconProps) => <Stroke {...p}><path d="m6 9 6 6 6-6" /></Stroke>
 export const PlusIcon = (p: IconProps) => <Stroke {...p}><path d="M12 5v14M5 12h14" /></Stroke>
 export const ScanIcon = (p: IconProps) => (
   <Stroke {...p}><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M8 9v6M11 9v6M14 9v6M17 9v6" /></Stroke>

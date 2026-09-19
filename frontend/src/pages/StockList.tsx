@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { useEntries, useStats } from '../api/hooks'
-import { FilterIcon } from '../components/Icons'
+import { useBrandGroups, useStats } from '../api/hooks'
+import type { BrandGroup } from '../api/types'
+import { ChevronIcon, FilterIcon } from '../components/Icons'
 import { ErrorNotice, Loading, SizeChip } from '../components/ui'
 import { useI18n, type MessageKey } from '../i18n'
 import { date, som, spaced } from '../lib/format'
 
-const STOCK: [string, MessageKey][] = [['in', 'inStock'], ['out', 'soldOut'], ['all', 'all']]
+const STOCK: [string, MessageKey][] = [['in', 'inStock'], ['low', 'runningLow'], ['out', 'soldOut'], ['all', 'all']]
 const ORDERING: [string, MessageKey][] = [
   ['-batch__date_added', 'newestFirst'],
   ['batch__date_added', 'oldestFirst'],
@@ -45,9 +46,19 @@ export default function StockList() {
     }, { replace: true })
   }
 
-  const entries = useEntries({ q, size, stock, added_from: addedFrom, added_to: addedTo, ordering: ordering || undefined })
+  const entries = useBrandGroups({ q, size, stock, added_from: addedFrom, added_to: addedTo, ordering: ordering || undefined })
   const summary = useStats({})
   const rows = entries.data?.pages.flatMap((page) => page.results) ?? []
+  const [open, setOpen] = useState<Set<string>>(new Set())
+
+  function toggle(brand: string) {
+    setOpen((current) => {
+      const next = new Set(current)
+      if (next.has(brand)) next.delete(brand)
+      else next.add(brand)
+      return next
+    })
+  }
   const filtered = Boolean(q) || hasFilters || stock !== 'in'
 
   return (
@@ -142,23 +153,10 @@ export default function StockList() {
       ) : (
         <>
           <ul className="stock-list">
-            {rows.map((entry) => (
-              <li key={entry.code} className={`stock-row${entry.in_stock ? (entry.quantity <= 1 ? ' low' : '') : ' sold-out'}`}>
-                <Link to={`/e/${entry.code}`}>
-                  <SizeChip size={entry.size} />
-                  <span>
-                    <span className="stock-brand">{entry.batch.brand}</span>
-                    <span className="stock-meta">{som(entry.batch.bought_price, t('som'))}, {date(entry.batch.date_added)}</span>
-                  </span>
-                  <span className="stock-qty">
-                    {entry.in_stock ? (
-                      <><strong>{entry.quantity}</strong><span>{t('left')}</span></>
-                    ) : (
-                      <strong>{t('soldOut')}</strong>
-                    )}
-                  </span>
-                </Link>
-              </li>
+            {rows.map((group, i) => (
+              // A single result (a scanned code, one brand searched) opens by itself.
+              <BrandRow key={group.brand} id={`brand-${i}`} group={group} open={rows.length === 1 || open.has(group.brand)}
+                onToggle={() => toggle(group.brand)} />
             ))}
           </ul>
           {entries.hasNextPage && (
@@ -171,5 +169,57 @@ export default function StockList() {
         </>
       )}
     </>
+  )
+}
+
+function BrandRow({ id, group, open, onToggle }: { id: string; group: BrandGroup; open: boolean; onToggle: () => void }) {
+  const { t } = useI18n()
+  const price = group.min_price === group.max_price
+    ? som(group.min_price, t('som'))
+    : `${spaced(group.min_price)} – ${som(group.max_price, t('som'))}`
+  // Price and date per size only matter when the sizes came in different deliveries.
+  const mixed = group.deliveries > 1
+
+  return (
+    <li className={`stock-row brand-row${group.pairs === 0 ? ' sold-out' : ''}${open ? ' open' : ''}`}>
+      <button type="button" className="brand-toggle" aria-expanded={open} aria-controls={id} onClick={onToggle}>
+        <span>
+          <span className="stock-brand">{group.brand}</span>
+          <span className="stock-meta">
+            {t('sizesCount', { n: group.entries.length })} · {price}, {date(group.last_added)}
+          </span>
+        </span>
+        <span className="stock-qty">
+          {group.pairs > 0 ? (
+            <><strong>{group.pairs}</strong><span>{t('left')}</span></>
+          ) : (
+            <strong>{t('soldOut')}</strong>
+          )}
+        </span>
+        <ChevronIcon size={20} className="brand-chevron" />
+      </button>
+
+      {open && (
+        <ul className="size-list" id={id}>
+          {group.entries.map((entry) => (
+            <li key={entry.code} className={`stock-row${entry.in_stock ? (entry.quantity <= 1 ? ' low' : '') : ' sold-out'}`}>
+              <Link to={`/e/${entry.code}`}>
+                <SizeChip size={entry.size} />
+                <span className="stock-meta">
+                  {mixed && <>{som(entry.batch.bought_price, t('som'))}, {date(entry.batch.date_added)}</>}
+                </span>
+                <span className="stock-qty">
+                  {entry.in_stock ? (
+                    <><strong>{entry.quantity}</strong><span>{t('left')}</span></>
+                  ) : (
+                    <strong>{t('soldOut')}</strong>
+                  )}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
   )
 }

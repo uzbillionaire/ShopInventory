@@ -308,9 +308,12 @@ LOGGING = {
         'level': os.environ.get('DJANGO_LOG_LEVEL', 'INFO'),
     },
     'loggers': {
+        # WARNING, not ERROR: Django reports every 4xx here at WARNING level,
+        # including the reason a request was rejected. Raising this to ERROR
+        # hides those messages and makes production failures impossible to explain.
         'django.request': {
             'handlers': ['console'],
-            'level': 'ERROR',
+            'level': 'WARNING',
             'propagate': False,
         },
     },

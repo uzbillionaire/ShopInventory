@@ -25,7 +25,7 @@ export default function Entry() {
           <p>{t('codeNotFoundHint', { code: code.toUpperCase() })}</p>
           <div className="export-actions">
             <Link className="button" to="/scan">{t('scanAgain')}</Link>
-            <Link className="button ghost" to="/">{t('searchStock')}</Link>
+            <Link className="button ghost" to="/stock">{t('searchStock')}</Link>
           </div>
         </div>
       )
@@ -49,7 +49,7 @@ export default function Entry() {
 
   return (
     <>
-      <button type="button" className="back" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}>
+      <button type="button" className="back" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/stock'))}>
         <BackIcon size={20} />{t('back')}
       </button>
 
@@ -86,7 +86,7 @@ export default function Entry() {
           <button type="button" className="button ghost" onClick={downloadLabel} disabled={downloading}>
             {downloading ? t('preparing') : t('downloadLabel')}
           </button>
-          <Link className="button ghost" to={`/?q=${encodeURIComponent(e.batch.brand)}&stock=all`}>{t('findSimilar')}</Link>
+          <Link className="button ghost" to={`/stock?q=${encodeURIComponent(e.batch.brand)}&stock=all`}>{t('findSimilar')}</Link>
         </div>
       </div>
 

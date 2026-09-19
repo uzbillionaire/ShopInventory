@@ -1,7 +1,9 @@
+import { useEffect } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { useAuth } from '../auth'
 import { useI18n } from '../i18n'
-import { ChartIcon, ListIcon, LogoutIcon, PlusIcon, ScanIcon, ShoeMark, TagIcon } from './Icons'
+import { unlockSound } from '../lib/feedback'
+import { ChartIcon, HomeIcon, ListIcon, LogoutIcon, ScanIcon, ShoeMark, TagIcon } from './Icons'
 import { LanguageSwitch } from './ui'
 
 export default function Layout() {
@@ -9,6 +11,11 @@ export default function Layout() {
   const { logout } = useAuth()
   const { pathname } = useLocation()
   const navClass = ({ isActive }: { isActive: boolean }) => (isActive ? 'active' : undefined)
+
+  useEffect(() => {
+    window.addEventListener('pointerdown', unlockSound, { once: true })
+    return () => window.removeEventListener('pointerdown', unlockSound)
+  }, [])
 
   return (
     <div className="app">
@@ -32,8 +39,8 @@ export default function Layout() {
 
       <nav className="nav" aria-label={t('mainMenu')}>
         <ul>
-          <li><NavLink to="/" end className={({ isActive }) => (isActive || pathname.startsWith('/e/') ? 'active' : undefined)}><ListIcon />{t('navStock')}</NavLink></li>
-          <li><NavLink to="/add" className={navClass}><PlusIcon />{t('navAdd')}</NavLink></li>
+          <li><NavLink to="/" end className={navClass}><HomeIcon />{t('navHome')}</NavLink></li>
+          <li><NavLink to="/stock" className={({ isActive }) => (isActive || pathname === '/add' || pathname.startsWith('/e/') ? 'active' : undefined)}><ListIcon />{t('navStock')}</NavLink></li>
           <li className="scan-tab">
             <NavLink to="/scan" className={navClass}>
               <span className="scan-disc"><ScanIcon size={28} /></span>

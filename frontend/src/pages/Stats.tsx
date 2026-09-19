@@ -6,13 +6,13 @@ import { ErrorNotice, Loading, SizeChip } from '../components/ui'
 import { useI18n, type MessageKey } from '../i18n'
 import { date, daysAgo, isoDay, som, spaced } from '../lib/format'
 
-const PRESETS: [MessageKey, number][] = [['days7', 7], ['days30', 30], ['days90', 90], ['year', 365]]
+const PRESETS: [MessageKey, number][] = [['daily', 1], ['days7', 7], ['days30', 30]]
 
 export default function Stats() {
   const { t, lang } = useI18n()
   const [params, setParams] = useSearchParams()
   const today = isoDay(new Date())
-  const start = params.get('start') ?? daysAgo(29)
+  const start = params.get('start') ?? today
   const end = params.get('end') ?? today
   const slowDays = Number(params.get('slow_days') ?? 30)
   const [draft, setDraft] = useState({ start, end })
@@ -104,7 +104,6 @@ export default function Stats() {
                 <div><dt>{t('revenue')}</dt><dd>{som(s.sales.revenue, unit)}</dd></div>
                 <div><dt>{t('pairsSold')}</dt><dd>{spaced(s.sales.units)}</dd></div>
                 <div><dt>{t('stockAtCost')}</dt><dd>{som(s.inventory.value, unit)}</dd></div>
-                <div><dt>{t('avgDaysToSell')}</dt><dd>{s.average_days_to_sell === null ? '—' : t('nDays', { n: s.average_days_to_sell })}</dd></div>
               </dl>
 
               <section className="section">

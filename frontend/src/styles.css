@@ -94,6 +94,12 @@ main { max-width: 760px; margin: 0 auto; padding: 4px var(--gutter) 0; }
 .back:hover { color: var(--ink); }
 
 .section { margin-top: 32px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.home-actions { display: grid; gap: 10px; }
+.home-actions .button { gap: 10px; }
+.sell-big { min-height: 64px; font-size: 20px; }
+.home-more { display: inline-block; margin-top: 12px; font-weight: 600; text-decoration: none; }
+.section-head .home-more { margin-top: 0; }
 .section-title { font: 600 18px/1.3 var(--text); margin-bottom: 10px; }
 .muted { color: var(--muted); }
 
@@ -252,6 +258,22 @@ select.input {
 .stock-row.low .stock-qty strong { color: var(--red); }
 .stock-row.sold-out .stock-qty strong { color: var(--muted); font: 600 14px/1.2 var(--text); }
 
+/* A brand opens into its sizes. */
+.brand-toggle {
+  display: grid; grid-template-columns: 1fr auto 20px; gap: 14px; align-items: center; width: 100%;
+  padding: 12px 2px; min-height: 72px; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.brand-toggle:hover .stock-brand { color: var(--tile); }
+.brand-toggle:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 8px; }
+.brand-chevron { color: var(--muted); transition: transform 0.2s ease; }
+.brand-row.open .brand-chevron { transform: rotate(180deg); }
+.size-list { list-style: none; margin: 0 0 12px; padding: 0 0 0 14px; border-left: 2px solid var(--rule); }
+.size-list .stock-row:last-child { border-bottom: 0; }
+.size-list .stock-row a { grid-template-columns: 44px 1fr auto; min-height: 60px; padding: 6px 2px; }
+.size-list .size-chip { width: 44px; height: 44px; font-size: 15px; }
+.brand-row.sold-out > .brand-toggle .stock-brand { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .brand-chevron { transition: none; } }
+
 .more { display: flex; justify-content: center; margin-top: 16px; }
 
 .empty { padding: 28px 0; }
@@ -360,6 +382,15 @@ select.input {
 .label-row input[type="checkbox"], .select-all input { width: 24px; height: 24px; accent-color: var(--tile); margin: 0; }
 .label-row .input { min-height: 44px; text-align: center; padding: 6px; }
 .copies-label { font-size: 12px; color: var(--muted); display: block; text-align: center; margin-top: 2px; }
+.label-brand { border-bottom: 1px solid var(--rule); }
+.label-brand-head { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: center; }
+.label-brand-head input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--tile); margin: 0; }
+.label-brand-head .brand-toggle { grid-template-columns: 1fr 20px; min-height: 64px; }
+.label-brand.open .brand-chevron { transform: rotate(180deg); }
+.label-brand .size-list { margin-left: 12px; }
+.label-brand .label-row { grid-template-columns: 28px 44px 1fr 76px; }
+.label-brand .label-row:last-child { border-bottom: 0; }
+.label-brand .size-chip { width: 44px; height: 44px; font-size: 15px; }
 .select-all { display: flex; align-items: center; gap: 12px; min-height: 48px; font-weight: 600; border-bottom: 1px solid var(--rule); }
 
 /* ---------- Stats ---------- */
@@ -376,6 +407,7 @@ select.input {
 .headline dd.loss { color: var(--red); }
 
 .figures { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 20px; margin: 18px 0 0; padding: 16px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.figures > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .figures dt { color: var(--muted); font-size: 14px; }
 .figures dd { margin: 2px 0 0; font: 600 18px/1.25 var(--display); letter-spacing: -0.02em; }
 

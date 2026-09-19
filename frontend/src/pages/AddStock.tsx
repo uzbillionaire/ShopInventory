@@ -256,7 +256,7 @@ function Added({ result, onAddMore }: { result: RestockResult; onAddMore: () => 
         </button>
         <div className="secondary">
           <button type="button" className="button ghost" onClick={onAddMore}>{t('addMoreStock')}</button>
-          <Link className="button ghost" to="/">{t('navStock')}</Link>
+          <Link className="button ghost" to="/stock">{t('navStock')}</Link>
         </div>
       </div>
     </>

@@ -37,6 +37,18 @@ class SizeEntrySerializer(serializers.ModelSerializer):
         return entry.initial_quantity - entry.quantity
 
 
+class BrandGroupSerializer(serializers.Serializer):
+    """One brand on the stock list, with every matching size line under it."""
+
+    brand = serializers.CharField()
+    pairs = serializers.IntegerField(help_text='Pairs left across all sizes shown.')
+    min_price = serializers.IntegerField()
+    max_price = serializers.IntegerField()
+    last_added = serializers.DateTimeField()
+    deliveries = serializers.IntegerField(help_text='How many deliveries the sizes come from.')
+    entries = SizeEntrySerializer(many=True)
+
+
 class SaleSerializer(serializers.ModelSerializer):
     code = serializers.CharField(source='size_entry.code', read_only=True)
     brand = serializers.CharField(source='size_entry.batch.brand', read_only=True)

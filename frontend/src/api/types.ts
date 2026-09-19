@@ -19,6 +19,17 @@ export interface SizeEntry {
   batch: Batch
 }
 
+/** One brand on the stock list, with its matching size lines. */
+export interface BrandGroup {
+  brand: string
+  pairs: number
+  min_price: number
+  max_price: number
+  last_added: string
+  deliveries: number
+  entries: SizeEntry[]
+}
+
 export interface Sale {
   id: number
   code: string
@@ -62,7 +73,6 @@ export interface Stats {
   sales: { revenue: number; cost: number; profit: number; units: number }
   best_brands: Ranking[]
   best_sizes: Ranking[]
-  average_days_to_sell: number | null
   slow_moving: { days: number; entries: SizeEntry[] }
   timeline: {
     step: 'day' | 'week' | 'month'

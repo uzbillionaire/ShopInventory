@@ -1,9 +1,10 @@
 import csv
 import io
+from collections import defaultdict
 from datetime import timedelta
 
 from django.db import transaction
-from django.db.models import F, ProtectedError
+from django.db.models import Count, F, Max, Min, ProtectedError, Sum
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.translation import gettext as _
@@ -22,10 +23,28 @@ from . import reports, services, stats
 from .filters import SaleFilter, SizeEntryFilter
 from .models import Batch, Sale, SizeEntry
 from .serializers import (
-    BatchCreateSerializer, BatchSerializer, DateRangeSerializer, DayQuerySerializer, LabelSheetSerializer, RestockResultSerializer,
-    SaleSerializer, SellResultSerializer, SellSerializer, SizeEntryDetailSerializer, SizeEntrySerializer,
+    BatchCreateSerializer, BatchSerializer, BrandGroupSerializer, DateRangeSerializer, DayQuerySerializer, LabelSheetSerializer,
+    RestockResultSerializer, SaleSerializer, SellResultSerializer, SellSerializer, SizeEntryDetailSerializer, SizeEntrySerializer,
     UserSerializer,
 )
+
+# The list's sort options, applied to whole brands instead of single size lines.
+BRAND_ORDERING = {
+    '-batch__date_added': ['-last_added'],
+    'batch__date_added': ['last_added'],
+    '-quantity': ['-pairs'],
+    'quantity': ['pairs'],
+    '-batch__bought_price': ['-max_price'],
+    'batch__bought_price': ['min_price'],
+}
+
+
+def _size_key(size):
+    """Sort sizes as numbers (9.5 before 40), with anything non-numeric after."""
+    try:
+        return (0, float(size), size)
+    except ValueError:
+        return (1, 0, size)
 
 
 class LoginView(TokenObtainPairView):
@@ -112,6 +131,28 @@ class SizeEntryViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, mixin
             return Response({'detail': _('This size already has sales, so it can’t be deleted.')},
                             status=status.HTTP_409_CONFLICT)
 
+    @extend_schema(responses=BrandGroupSerializer(many=True))
+    @action(detail=False)
+    def grouped(self, request):
+        """The stock list one brand per row: same filters as the list, paginated by brand so a brand is never split."""
+        entries = self.filter_queryset(self.get_queryset()).order_by()
+        groups = (
+            entries.values(brand=F('batch__brand'))
+            .annotate(
+                pairs=Sum('quantity'), min_price=Min('batch__bought_price'), max_price=Max('batch__bought_price'),
+                last_added=Max('batch__date_added'), deliveries=Count('batch', distinct=True),
+            )
+            .order_by(*BRAND_ORDERING.get(request.query_params.get('ordering'), ['-last_added']), 'brand')
+        )
+        page = self.paginate_queryset(groups)
+
+        by_brand = defaultdict(list)
+        for entry in entries.filter(batch__brand__in=[group['brand'] for group in page]):
+            by_brand[entry.batch.brand].append(entry)
+        for group in page:
+            group['entries'] = sorted(by_brand[group['brand']], key=lambda e: (_size_key(e.size), -e.batch.date_added.timestamp()))
+        return self.get_paginated_response(BrandGroupSerializer(page, many=True, context={'request': request}).data)
+
     @extend_schema(request=SellSerializer, responses={201: SellResultSerializer, 409: OpenApiResponse(description='Sold out')})
     @action(detail=True, methods=['post'])
     def sell(self, request, code=None):
@@ -182,7 +223,6 @@ class StatsView(APIView):
         value, pairs = stats.inventory_value()
         step, points = stats.sales_over_time(sales, start, end)
         slow_days = query['slow_days']
-        avg_days = stats.average_days_to_sell(sales)
         return Response({
             'start': start,
             'end': end,
@@ -190,7 +230,6 @@ class StatsView(APIView):
             'sales': stats.sales_summary(sales),
             'best_brands': stats.best_sellers(sales, 'size_entry__batch__brand'),
             'best_sizes': stats.best_sellers(sales, 'size_entry__size'),
-            'average_days_to_sell': round(avg_days, 1) if avg_days is not None else None,
             'slow_moving': {
                 'days': slow_days,
                 'entries': SizeEntrySerializer(stats.slow_moving(slow_days)[:30], many=True, context={'request': request}).data,

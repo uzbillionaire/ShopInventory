@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
-import type { DailyReport, Page, ReportDay, RestockResult, Sale, SizeEntry, SizeEntryDetail, Stats } from './types'
+import type { BrandGroup, DailyReport, Page, ReportDay, RestockResult, Sale, SizeEntry, SizeEntryDetail, Stats } from './types'
 
 function query(params: Record<string, string | number | boolean | undefined | null>) {
   const search = new URLSearchParams()
@@ -20,13 +20,22 @@ export interface EntryFilters {
   ordering?: string
 }
 
-export function useEntries(filters: EntryFilters) {
+/** The stock list, one brand per row; pages hold whole brands so one is never split. */
+export function useBrandGroups(filters: EntryFilters) {
   return useInfiniteQuery({
-    queryKey: ['entries', 'list', filters],
-    queryFn: ({ pageParam }) => api<Page<SizeEntry>>(`/entries/${query({ ...filters, page: pageParam })}`),
+    queryKey: ['entries', 'grouped', filters],
+    queryFn: ({ pageParam }) => api<Page<BrandGroup>>(`/entries/grouped/${query({ ...filters, page: pageParam })}`),
     initialPageParam: 1,
     getNextPageParam: (last, pages) => (last.next ? pages.length + 1 : undefined),
     placeholderData: keepPreviousData,
+  })
+}
+
+/** Sizes down to their last pair, for the home screen. */
+export function useLowStock() {
+  return useQuery({
+    queryKey: ['entries', 'low'],
+    queryFn: () => api<Page<SizeEntry>>(`/entries/${query({ stock: 'low', ordering: 'batch__brand' })}`),
   })
 }
 

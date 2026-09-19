@@ -170,6 +170,8 @@ class EntryTests(ApiTestCase):
         self.sell(adidas, 1)
         self.assertEqual(len(self.codes('stock=in')), 2)
         self.assertEqual(self.codes('stock=out'), [adidas])
+        self.client.patch(f"/api/entries/{self.entry('42').code}/", {'quantity': 1}, format='json')
+        self.assertEqual(self.codes('stock=low'), [self.entry('42').code])
         quantities = [e['quantity'] for e in self.client.get('/api/entries/?ordering=-quantity').data['results']]
         self.assertEqual(quantities, sorted(quantities, reverse=True))
 
@@ -191,6 +193,38 @@ class EntryTests(ApiTestCase):
         self.sell(code)
         self.assertEqual(self.client.delete(f'/api/entries/{code}/').status_code, 409)
         self.assertEqual(self.client.delete(f"/api/entries/{self.entry('42').code}/").status_code, 204)
+
+
+class GroupedEntryTests(ApiTestCase):
+    def setUp(self):
+        super().setUp()
+        self.add()
+        self.add(brand='Adidas', price=180_000, sizes=(('40', 1),))
+        self.add(price=270_000, sizes=(('41', 2), ('9.5', 1)))  # a second Nike delivery at a new price
+
+    def groups(self, query=''):
+        return self.client.get(f'/api/entries/grouped/?{query}').data['results']
+
+    def test_one_row_per_brand_across_deliveries(self):
+        nike, adidas = self.groups()  # Nike was restocked last, so it comes first
+        self.assertEqual((nike['brand'], nike['pairs'], nike['deliveries']), ('Nike Air', 11, 2))
+        self.assertEqual((nike['min_price'], nike['max_price']), (250_000, 270_000))
+        sizes = [(e['size'], e['batch']['bought_price']) for e in nike['entries']]
+        self.assertEqual(sizes, [('9.5', 270_000), ('41', 270_000), ('41', 250_000), ('42', 250_000)])
+        self.assertEqual((adidas['brand'], adidas['pairs'], len(adidas['entries'])), ('Adidas', 1, 1))
+
+    def test_filters_apply_to_the_sizes_inside_each_brand(self):
+        self.sell(self.entry('40', 'Adidas').code)
+        self.assertEqual([g['brand'] for g in self.groups('stock=in')], ['Nike Air'])
+        self.assertEqual([(g['brand'], g['pairs']) for g in self.groups('stock=out')], [('Adidas', 0)])
+        [nike] = self.groups('size=41')
+        self.assertEqual([e['size'] for e in nike['entries']], ['41', '41'])
+        self.assertEqual(nike['pairs'], 7)
+
+    def test_sort_options_order_whole_brands(self):
+        self.assertEqual([g['brand'] for g in self.groups('ordering=quantity')], ['Adidas', 'Nike Air'])
+        self.assertEqual([g['brand'] for g in self.groups('ordering=-batch__bought_price')], ['Nike Air', 'Adidas'])
+        self.assertEqual([g['brand'] for g in self.groups('ordering=batch__date_added')], ['Adidas', 'Nike Air'])
 
 
 class SellTests(ApiTestCase):
@@ -282,7 +316,6 @@ class StatsTests(ApiTestCase):
         self.assertEqual(data['timeline']['step'], 'day')
         self.assertEqual(len(data['timeline']['points']), 30)
         self.assertEqual(data['timeline']['points'][-1]['revenue'], 730_000)
-        self.assertEqual(data['average_days_to_sell'], 0.0)
 
     def test_slow_moving_stock(self):
         self.add(sizes=(('41', 3), ('42', 2)))

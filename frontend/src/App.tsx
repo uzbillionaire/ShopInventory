@@ -6,6 +6,7 @@ import AddStock from './pages/AddStock'
 import DailyReport from './pages/DailyReport'
 import Entry from './pages/Entry'
 import Export from './pages/Export'
+import Home from './pages/Home'
 import Labels from './pages/Labels'
 import Login from './pages/Login'
 import Reports from './pages/Reports'
@@ -29,7 +30,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route element={<RequireLogin><Layout /></RequireLogin>}>
-        <Route index element={<StockList />} />
+        <Route index element={<Home />} />
+        <Route path="stock" element={<StockList />} />
         <Route path="add" element={<AddStock />} />
         <Route path="e/:code" element={<Entry />} />
         <Route path="e/:code/sell" element={<Sell />} />

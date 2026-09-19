@@ -1,12 +1,17 @@
 const NBSP = ' '
 
-/** 250000 -> "250 000" (non-breaking spaces, as written on Uzbek price tags). */
+/**
+ * 250000 -> "250,000".
+ *
+ * Commas, not spaces: a spaced "150 000" reads as two separate numbers at a
+ * glance. The name is historical - the grouping character is a comma now.
+ */
 export function spaced(value: number | string | null | undefined): string {
   const digits = String(value ?? '').replace(/[^\d-]/g, '')
   if (!digits || digits === '-') return ''
   const number = Number(digits)
   const sign = number < 0 ? '−' : ''
-  return sign + Math.abs(number).toLocaleString('en-US').replace(/,/g, NBSP)
+  return sign + Math.abs(number).toLocaleString('en-US')
 }
 
 export function som(value: number, unit: string): string {
