@@ -323,6 +323,7 @@ class StatsTests(ApiTestCase):
         data = self.client.get('/api/stats/').data
         self.assertEqual(data['inventory'], {'value': 3 * 250_000 + 3 * 100_000, 'pairs': 6})
         self.assertEqual(data['sales'], {'revenue': 730_000, 'cost': 600_000, 'profit': 130_000, 'units': 3})
+        self.assertEqual(data['by_payment'], {'cash': 730_000, 'card': 0})
         self.assertEqual((data['best_brands'][0]['label'], data['best_brands'][0]['units']), ('Nike Air', 2))
         self.assertEqual(data['best_sizes'][0]['label'], '41')
         self.assertEqual(data['timeline']['step'], 'day')

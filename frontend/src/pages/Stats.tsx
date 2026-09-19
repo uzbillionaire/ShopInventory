@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router'
 import { useStats } from '../api/hooks'
 import type { Ranking } from '../api/types'
 import { ErrorNotice, Loading, SizeChip } from '../components/ui'
+import { PaymentSplit, SummaryGroup } from '../components/Summary'
 import { useI18n, type MessageKey } from '../i18n'
 import { date, daysAgo, isoDay, som, spaced } from '../lib/format'
 
@@ -100,11 +101,25 @@ export default function Stats() {
                 <dt>{t('profitForPeriod')}</dt>
                 <dd className={s.sales.profit < 0 ? 'loss' : undefined}>{som(s.sales.profit, unit)}</dd>
               </dl>
-              <dl className="figures">
-                <div><dt>{t('revenue')}</dt><dd>{som(s.sales.revenue, unit)}</dd></div>
-                <div><dt>{t('pairsSold')}</dt><dd>{spaced(s.sales.units)}</dd></div>
-                <div><dt>{t('stockAtCost')}</dt><dd>{som(s.inventory.value, unit)}</dd></div>
-              </dl>
+              <div className="summary">
+                <SummaryGroup title={t('groupSales')}>
+                  <dl className="figures plain">
+                    <div><dt>{t('revenue')}</dt><dd>{som(s.sales.revenue, unit)}</dd></div>
+                    <div><dt>{t('pairsSold')}</dt><dd>{spaced(s.sales.units)}</dd></div>
+                  </dl>
+                </SummaryGroup>
+                {/* Cash to count only means something for a single day. */}
+                {start === end && (
+                  <SummaryGroup title={t('groupPayment')}>
+                    <PaymentSplit {...s.by_payment} />
+                  </SummaryGroup>
+                )}
+                <SummaryGroup title={t('navStock')}>
+                  <dl className="figures plain">
+                    <div><dt>{t('stockAtCost')}</dt><dd>{som(s.inventory.value, unit)}</dd></div>
+                  </dl>
+                </SummaryGroup>
+              </div>
 
               {start !== end && <section className="section">
                 <h2 className="section-title">{t('salesOverTime')}</h2>

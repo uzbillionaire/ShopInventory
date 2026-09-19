@@ -3,6 +3,7 @@ import { Link, Navigate, useParams } from 'react-router'
 import { download } from '../api/client'
 import { useDailyReport } from '../api/hooks'
 import { BackIcon } from '../components/Icons'
+import { PaymentSplit, SummaryGroup } from '../components/Summary'
 import { ErrorNotice, Loading, SizeChip, useToast } from '../components/ui'
 import { useI18n } from '../i18n'
 import { dayLabel, isoDay, shiftDay, som, spaced } from '../lib/format'
@@ -62,14 +63,23 @@ export default function DailyReport() {
                 <dt>{t('profitForDay')}</dt>
                 <dd className={r.sales.profit < 0 ? 'loss' : undefined}>{som(r.sales.profit, unit)}</dd>
               </dl>
-              <dl className="figures">
-                <div><dt>{t('revenue')}</dt><dd>{som(r.sales.revenue, unit)}</dd></div>
-                <div><dt>{t('pairsSold')}</dt><dd>{spaced(r.sales.units)}</dd></div>
-                <div><dt>{t('cashInDrawer')}</dt><dd>{som(r.by_payment.cash, unit)}</dd></div>
-                <div><dt>{t('paidByCard')}</dt><dd>{som(r.by_payment.card, unit)}</dd></div>
-                <div><dt>{t('receivedPairs')}</dt><dd>{spaced(r.received_summary.pairs)}</dd></div>
-                <div><dt>{t('receivedValue')}</dt><dd>{som(r.received_summary.value, unit)}</dd></div>
-              </dl>
+              <div className="summary">
+                <SummaryGroup title={t('groupSales')}>
+                  <dl className="figures plain">
+                    <div><dt>{t('revenue')}</dt><dd>{som(r.sales.revenue, unit)}</dd></div>
+                    <div><dt>{t('pairsSold')}</dt><dd>{spaced(r.sales.units)}</dd></div>
+                  </dl>
+                </SummaryGroup>
+                <SummaryGroup title={t('groupPayment')}>
+                  <PaymentSplit {...r.by_payment} />
+                </SummaryGroup>
+                <SummaryGroup title={t('received')}>
+                  <dl className="figures plain">
+                    <div><dt>{t('receivedPairs')}</dt><dd>{spaced(r.received_summary.pairs)}</dd></div>
+                    <div><dt>{t('receivedValue')}</dt><dd>{som(r.received_summary.value, unit)}</dd></div>
+                  </dl>
+                </SummaryGroup>
+              </div>
 
               <div className="tag-actions">
                 <button type="button" className="button ghost block" onClick={downloadExcel} disabled={downloading}>

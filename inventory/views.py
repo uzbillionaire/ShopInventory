@@ -230,6 +230,7 @@ class StatsView(APIView):
             'sales': stats.sales_summary(sales),
             'best_brands': stats.best_sellers(sales, 'size_entry__batch__brand'),
             'best_sizes': stats.best_sellers(sales, 'size_entry__size'),
+            'by_payment': reports.by_payment(sales),
             'slow_moving': {
                 'days': slow_days,
                 'entries': SizeEntrySerializer(stats.slow_moving(slow_days)[:30], many=True, context={'request': request}).data,

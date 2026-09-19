@@ -76,6 +76,7 @@ export interface Stats {
   sales: { revenue: number; cost: number; profit: number; units: number }
   best_brands: Ranking[]
   best_sizes: Ranking[]
+  by_payment: Record<Payment, number>
   slow_moving: { days: number; entries: SizeEntry[] }
   timeline: {
     step: 'day' | 'week' | 'month'
