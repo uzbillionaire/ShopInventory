@@ -61,7 +61,8 @@ export default function Entry() {
           </div>
           <div className="tag-size">
             <small>{t('size')}</small>
-            <b>{e.size}</b>
+            {/* Half sizes like 40.5 are twice as wide as 40, so they get a smaller font to stay on the card. */}
+            <b className={e.size.length > 2 ? 'long' : undefined}>{e.size}</b>
           </div>
         </div>
 
@@ -88,6 +89,7 @@ export default function Entry() {
           </button>
           <Link className="button ghost" to={`/stock?q=${encodeURIComponent(e.batch.brand)}&stock=all`}>{t('findSimilar')}</Link>
         </div>
+        <Link className="button ghost block" to={`/e/${e.code}/edit`}>{t('editProduct')}</Link>
       </div>
 
       <dl className="facts">

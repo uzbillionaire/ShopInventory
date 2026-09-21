@@ -4,12 +4,13 @@ import { useReportDays } from '../api/hooks'
 import { BackIcon } from '../components/Icons'
 import { ErrorNotice, Loading } from '../components/ui'
 import { useI18n } from '../i18n'
-import { dayLabel, daysAgo, isoDay, som, spaced } from '../lib/format'
+import { useShopToday } from '../lib/clock'
+import { dayLabel, daysAgo, som, spaced } from '../lib/format'
 
 export default function Reports() {
   const { t, lang, pairs } = useI18n()
   const [span, setSpan] = useState(30)
-  const today = isoDay(new Date())
+  const today = useShopToday()
   const report = useReportDays(daysAgo(span - 1), today)
   const unit = t('som')
 

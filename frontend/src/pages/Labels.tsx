@@ -8,6 +8,9 @@ import { ErrorNotice, Loading, SizeChip, useToast } from '../components/ui'
 import { useI18n } from '../i18n'
 import { date } from '../lib/format'
 
+// Same limit as the server (inventory/serializers.py), so the button explains it instead of failing.
+const MAX_LABELS = 2000
+
 export default function Labels() {
   const { t } = useI18n()
   const toast = useToast()
@@ -141,7 +144,8 @@ export default function Labels() {
             })}
           </ul>
           <div className="form-footer">
-            <button type="button" className="button block" disabled={busy || total === 0} onClick={print}>
+            {total > MAX_LABELS && <p className="field-error" role="alert">{t('tooManyLabels', { max: MAX_LABELS })}</p>}
+            <button type="button" className="button block" disabled={busy || total === 0 || total > MAX_LABELS} onClick={print}>
               {busy ? t('preparing') : t('makeLabels', { n: total })}
             </button>
           </div>

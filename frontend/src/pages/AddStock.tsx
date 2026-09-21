@@ -6,7 +6,7 @@ import type { RestockResult } from '../api/types'
 import { CameraIcon, CloseIcon } from '../components/Icons'
 import { ErrorNotice, MoneyInput, SizeChip, useToast } from '../components/ui'
 import { useI18n, type MessageKey } from '../i18n'
-import { parseMoney, som } from '../lib/format'
+import { MAX_PRICE, parseMoney, som } from '../lib/format'
 
 interface Row {
   id: number
@@ -68,6 +68,7 @@ export default function AddStock() {
     const found: Record<string, MessageKey> = {}
     if (!brand.trim()) found.brand = 'enterBrand'
     if (!parseMoney(price)) found.price = 'enterPrice'
+    else if (parseMoney(price)! > MAX_PRICE) found.price = 'priceTooHigh'
     let filled = 0
     rows.forEach((row) => {
       const size = row.size.trim()

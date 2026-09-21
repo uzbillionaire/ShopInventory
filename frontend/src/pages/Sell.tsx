@@ -5,7 +5,7 @@ import type { Payment } from '../api/types'
 import { BackIcon } from '../components/Icons'
 import { ErrorNotice, Loading, MoneyInput, SizeChip, useToast } from '../components/ui'
 import { useI18n, type MessageKey } from '../i18n'
-import { parseMoney, som, spaced } from '../lib/format'
+import { MAX_PRICE, parseMoney, som, spaced } from '../lib/format'
 
 const PAYMENTS: [Payment, MessageKey][] = [['cash', 'cash'], ['card', 'card']]
 
@@ -28,6 +28,7 @@ export default function Sell() {
   const unit = t('som')
   const amount = parseMoney(price)
   const margin = amount === null ? null : amount - e.batch.bought_price
+  const tooHigh = amount !== null && amount > MAX_PRICE
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -35,6 +36,7 @@ export default function Sell() {
       setMissing(true)
       return
     }
+    if (tooHigh) return
     sell.mutate({ soldPrice: amount, payment }, {
       onSuccess: ({ entry: updated }) => {
         navigate(`/e/${e.code}`, { replace: true })
@@ -65,6 +67,7 @@ export default function Sell() {
           <MoneyInput id="sold_price" value={price} autoFocus aria-invalid={missing}
             onValueChange={(value) => { setPrice(value); setMissing(false) }} />
           {missing && <span className="field-error">{t('enterSoldPrice')}</span>}
+          {tooHigh && <span className="field-error">{t('priceTooHigh')}</span>}
           <div className="quick-prices">
             {suggestions.map((value) => (
               <button type="button" key={value} onClick={() => { setPrice(spaced(value)); setMissing(false) }}>

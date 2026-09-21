@@ -6,13 +6,14 @@ import { BackIcon } from '../components/Icons'
 import { PaymentSplit, SummaryGroup } from '../components/Summary'
 import { ErrorNotice, Loading, SizeChip, useToast } from '../components/ui'
 import { useI18n } from '../i18n'
-import { dayLabel, isoDay, shiftDay, som, spaced } from '../lib/format'
+import { useShopToday } from '../lib/clock'
+import { dayLabel, shiftDay, som, spaced } from '../lib/format'
 
 export default function DailyReport() {
   const { date = '' } = useParams()
   const { t, lang, pairs } = useI18n()
   const toast = useToast()
-  const today = isoDay(new Date())
+  const today = useShopToday()
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) && date <= today
   const report = useDailyReport(valid ? date : today)
   const [downloading, setDownloading] = useState(false)

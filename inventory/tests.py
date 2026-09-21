@@ -2,9 +2,12 @@ import io
 import json
 import shutil
 import tempfile
+from unittest import mock
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.utils import timezone
@@ -181,12 +184,63 @@ class EntryTests(ApiTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual((response.data['quantity'], response.data['initial_quantity'], response.data['sold']), (3, 3, 0))
 
-    def test_code_and_size_are_read_only(self):
+    def test_code_is_read_only(self):
         entry = self.entry('41')
-        self.client.patch(f'/api/entries/{entry.code}/', {'code': 'AAAAAAAAAA', 'size': '45'}, format='json')
+        self.client.patch(f'/api/entries/{entry.code}/', {'code': 'AAAAAAAAAA'}, format='json')
         entry.refresh_from_db()
-        self.assertEqual(entry.size, '41')
         self.assertNotEqual(entry.code, 'AAAAAAAAAA')
+
+    def test_edit_size_and_delivery_in_one_save(self):
+        entry = self.entry('41')
+        SizeEntry.objects.update(label_printed=True)
+        response = self.client.patch(f'/api/entries/{entry.code.lower()}/', {
+            'size': '43,5', 'quantity': 4, 'brand': 'Nike Air Max', 'bought_price': 240_000,
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual((response.data['size'], response.data['quantity'], response.data['code']), ('43.5', 4, entry.code))
+        # Brand and price belong to the delivery, so the other size in it changes too.
+        other = self.entry('42', 'Nike Air Max')
+        self.assertEqual(other.batch.bought_price, 240_000)
+        # Size and brand are on the label, so both lines need printing again.
+        self.assertFalse(other.label_printed)
+        self.assertFalse(SizeEntry.objects.get(code=entry.code).label_printed)
+        self.assertTrue(self.entry('40', 'Adidas').label_printed)
+
+    def test_price_fix_changes_profit_of_past_sales(self):
+        code = self.entry('41').code
+        self.sell(code, 300_000)
+        self.client.patch(f'/api/entries/{code}/', {'bought_price': 200_000}, format='json')
+        self.assertEqual(self.client.get('/api/sales/').data['results'][0]['profit'], 100_000)
+
+    def test_edit_rejects_bad_values_and_changes_nothing(self):
+        entry = self.entry('41')
+        for body in [{'size': '42'}, {'size': 'XL'}, {'brand': '  '}, {'bought_price': 0}, {'quantity': -1},
+                     {'size': '44', 'bought_price': 0}]:
+            with self.subTest(body=body):
+                self.assertEqual(self.client.patch(f'/api/entries/{entry.code}/', body, format='json').status_code, 400)
+        entry.refresh_from_db()
+        self.assertEqual((entry.size, entry.batch.brand, entry.batch.bought_price), ('41', 'Nike Air', 250_000))
+
+    def test_edit_photo_replace_and_remove(self):
+        entry = self.entry('41')
+        image = io.BytesIO()
+        Image.new('RGB', (4, 4)).save(image, 'JPEG')
+        response = self.client.patch(f'/api/entries/{entry.code}/', {
+            'picture': SimpleUploadedFile('shoe.jpg', image.getvalue(), 'image/jpeg'),
+        }, format='multipart')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['batch']['picture'])
+        response = self.client.patch(f'/api/entries/{entry.code}/', {'picture': ''}, format='multipart')
+        self.assertIsNone(response.data['batch']['picture'])
+
+    def test_deleting_last_size_removes_its_delivery(self):
+        batch = self.entry('41').batch
+        self.assertEqual(self.client.get(f"/api/entries/{self.entry('41').code}/").data['delivery_sizes'], 2)
+        self.assertEqual(self.client.delete(f"/api/entries/{self.entry('41').code}/").status_code, 204)
+        self.assertTrue(Batch.objects.filter(pk=batch.pk).exists())
+        self.assertEqual(self.client.delete(f"/api/entries/{self.entry('42').code}/").status_code, 204)
+        self.assertFalse(Batch.objects.filter(pk=batch.pk).exists())
+        self.assertNotIn('Nike Air', self.client.get('/api/batches/brands/').data)
 
     def test_cannot_delete_line_with_sales(self):
         code = self.entry('41').code
@@ -225,6 +279,33 @@ class GroupedEntryTests(ApiTestCase):
         self.assertEqual([g['brand'] for g in self.groups('ordering=quantity')], ['Adidas', 'Nike Air'])
         self.assertEqual([g['brand'] for g in self.groups('ordering=-batch__bought_price')], ['Nike Air', 'Adidas'])
         self.assertEqual([g['brand'] for g in self.groups('ordering=batch__date_added')], ['Adidas', 'Nike Air'])
+
+
+class EdgeCaseTests(ApiTestCase):
+    def setUp(self):
+        super().setUp()
+        self.add()
+        self.add(brand='Adidas', price=180_000, sizes=(('40', 1),))
+
+    def test_price_with_extra_zeros_is_a_clear_error_not_a_crash(self):
+        self.assertEqual(self.add(price=25_000_000_000).status_code, 400)
+        response = self.sell(self.entry('41').code, 25_000_000_000)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('sold_price', response.data)
+        self.assertEqual(Sale.objects.count(), 0)
+
+    def test_stock_count_has_a_ceiling(self):
+        response = self.client.patch(f"/api/entries/{self.entry('41').code}/", {'quantity': 10_000_000_000}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_renaming_a_delivery_keeps_one_spelling_per_brand(self):
+        adidas = Batch.objects.get(brand='Adidas')
+        self.add(brand='Puma', price=90_000, sizes=(('39', 1),))
+        response = self.client.patch(f'/api/batches/{adidas.pk}/', {'brand': '  nike   AIR '}, format='json')
+        self.assertEqual(response.data['brand'], 'Nike Air')  # joins the existing brand, not a second "nike AIR"
+        puma = Batch.objects.get(brand='Puma')
+        self.assertEqual(self.client.patch(f'/api/batches/{puma.pk}/', {'brand': 'PUMA'}, format='json').data['brand'], 'PUMA')
+        self.assertEqual(self.client.patch(f'/api/batches/{puma.pk}/', {'brand': '   '}, format='json').status_code, 400)
 
 
 class SellTests(ApiTestCase):
@@ -272,6 +353,18 @@ class SellTests(ApiTestCase):
         self.assertEqual(self.client.delete(f'/api/sales/{sale_id}/').status_code, 405)
         self.assertEqual(Sale.objects.count(), 1)
 
+    def test_failed_admin_undo_does_not_restock(self):
+        from django.contrib import admin as django_admin
+
+        from .admin import SaleAdmin
+
+        self.sell(self.code)
+        sale = Sale.objects.get()
+        with mock.patch.object(django_admin.ModelAdmin, 'delete_model', side_effect=RuntimeError('db went away')):
+            with self.assertRaises(RuntimeError):
+                SaleAdmin(Sale, django_admin.site).delete_model(None, sale)
+        self.assertEqual(self.entry('41').quantity, 1)  # still sold: no phantom pair back on the shelf
+
     def test_admin_delete_restocks_the_pair(self):
         sale_id = self.sell(self.code).data['sale']['id']
         admin = get_user_model().objects.create_superuser('boss', password='admin-pass-2026')
@@ -284,6 +377,60 @@ class SellTests(ApiTestCase):
     def test_last_brand_price_suggestion(self):
         self.sell(self.code, 310_000)
         self.assertEqual(self.client.get(f'/api/entries/{self.code}/').data['last_brand_price'], 310_000)
+
+
+class SecurityTests(ApiTestCase):
+    def setUp(self):
+        super().setUp()
+        cache.clear()  # login limits live in the cache; start every test with a clean count
+        self.client.force_authenticate(None)
+
+    def login(self, password='bazaar-pass-2026', **headers):
+        return self.client.post('/api/auth/token/', {'username': 'owner', 'password': password}, format='json', **headers)
+
+    def refresh(self, token):
+        return self.client.post('/api/auth/token/refresh/', {'refresh': token}, format='json')
+
+    def test_admin_login_locks_after_five_wrong_passwords(self):
+        codes = [self.client.post('/admin/login/', {'username': 'owner', 'password': 'nope'}).status_code for _ in range(6)]
+        self.assertEqual(codes, [200] * 5 + [429])
+
+    @override_settings(REST_FRAMEWORK={**settings.REST_FRAMEWORK, 'NUM_PROXIES': 2})
+    def test_faked_forwarded_for_does_not_dodge_the_login_limit(self):
+        # Caddy adds the real visitor, nginx adds Caddy; anything before that is the visitor's own lie.
+        codes = [self.login('nope', HTTP_X_FORWARDED_FOR=f'10.9.9.{i}, 203.0.113.5, 172.18.0.2').status_code for i in range(12)]
+        self.assertEqual(codes[-1], status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_api_docs_are_for_admins_only(self):
+        self.assertIn(self.client.get('/api/schema/').status_code, (401, 403))
+        self.client.force_authenticate(self.user)
+        self.assertEqual(self.client.get('/api/schema/').status_code, 403)
+        self.client.force_authenticate(get_user_model().objects.create_user('boss', password='x-long-pass-1', is_staff=True))
+        self.assertEqual(self.client.get('/api/schema/').status_code, 200)
+
+    def test_logout_cancels_the_refresh_token(self):
+        refresh = self.login().data['refresh']
+        self.assertEqual(self.client.post('/api/auth/logout/', {'refresh': refresh}, format='json').status_code, 200)
+        self.assertEqual(self.refresh(refresh).status_code, 401)
+
+    def test_used_refresh_token_stops_working(self):
+        refresh = self.login().data['refresh']
+        self.assertEqual(self.refresh(refresh).status_code, 200)
+        self.assertEqual(self.refresh(refresh).status_code, 401)
+
+    def test_new_password_logs_out_everywhere(self):
+        refresh = self.login().data['refresh']
+        self.user.set_password('a-brand-new-pass-2026')
+        self.user.save()
+        self.assertEqual(self.refresh(refresh).status_code, 401)
+
+    def test_exports_keep_formula_like_brands_as_text(self):
+        self.client.force_authenticate(self.user)
+        self.add(brand='=HYPERLINK("http://evil.example")')
+        csv_text = self.client.get('/api/export/inventory.csv').content.decode('utf-8-sig')
+        self.assertIn("'=HYPERLINK", csv_text)
+        book = load_workbook(io.BytesIO(self.client.get('/api/export/inventory.xlsx').content))
+        self.assertEqual(book.active.cell(2, 2).value, "'=HYPERLINK(\"http://evil.example\")")
 
 
 class LabelTests(ApiTestCase):
@@ -305,6 +452,11 @@ class LabelTests(ApiTestCase):
         self.assertTrue(response.content.startswith(b'%PDF'))
         self.assertIn(b'/Count 3', response.content)  # 60 labels, 3x9 = 27 per A4 page
         self.assertFalse(SizeEntry.objects.filter(label_printed=False).exists())
+
+    def test_pdf_refuses_more_than_2000_labels(self):
+        codes = list(SizeEntry.objects.values_list('code', flat=True)) * 3  # 6 lines x 500 copies = 3000
+        response = self.client.post('/api/labels/pdf/', {'items': [{'code': c, 'copies': 500} for c in codes]}, format='json')
+        self.assertEqual(response.status_code, 400)
 
     def test_pdf_rejects_unknown_codes(self):
         response = self.client.post('/api/labels/pdf/', {'items': [{'code': 'ZZZZZZZZZZ'}]}, format='json')

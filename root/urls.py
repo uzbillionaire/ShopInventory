@@ -20,7 +20,11 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from inventory.security import admin_login
+
 urlpatterns = [
+    # Before admin.site.urls so it replaces the stock login page, which has no attempt limit.
+    path('admin/login/', admin_login),
     path('admin/', admin.site.urls),
     path('api/', include('inventory.urls')),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

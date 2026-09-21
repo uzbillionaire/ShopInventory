@@ -106,6 +106,28 @@ export function useSell(code: string) {
   })
 }
 
+/** Fix a product. Send only changed fields; brand, price and photo apply to its whole delivery. */
+export function useEditEntry(code: string) {
+  const invalidate = useInvalidateStock()
+  return useMutation({
+    mutationFn: (form: FormData) => api<SizeEntry>(`/entries/${encodeURIComponent(code)}/`, { method: 'PATCH', body: form }),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteEntry(code: string) {
+  const client = useQueryClient()
+  const invalidate = useInvalidateStock()
+  return useMutation({
+    mutationFn: () => api<void>(`/entries/${encodeURIComponent(code)}/`, { method: 'DELETE' }),
+    onSuccess: () => {
+      // Drop it instead of refetching, which would only 404.
+      client.removeQueries({ queryKey: ['entry', code.toUpperCase()] })
+      invalidate()
+    },
+  })
+}
+
 export function useDailyReport(date: string) {
   return useQuery({
     queryKey: ['stats', 'daily', date],

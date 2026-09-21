@@ -7,6 +7,10 @@ from rest_framework import serializers
 
 from .models import Batch, Sale, SizeEntry
 
+# Well under the database's integer limit (~2.1 billion); a typo with extra zeros gets a clear 400, not a crash.
+MAX_PRICE = 1_000_000_000
+MAX_PAIRS = 9999
+
 SIZE_PATTERN = re.compile(r'^\d{1,2}([.,]5)?$')
 
 
@@ -22,6 +26,14 @@ class BatchSerializer(serializers.ModelSerializer):
         fields = ['id', 'brand', 'bought_price', 'picture', 'date_added']
         read_only_fields = ['bought_price', 'date_added']
 
+    def validate_brand(self, value):
+        from .services import canonical_brand
+
+        brand = canonical_brand(value, exclude=self.instance)
+        if not brand:
+            raise serializers.ValidationError(_('Enter a brand.'))
+        return brand
+
 
 class SizeEntrySerializer(serializers.ModelSerializer):
     batch = BatchSerializer(read_only=True)
@@ -32,6 +44,7 @@ class SizeEntrySerializer(serializers.ModelSerializer):
         model = SizeEntry
         fields = ['code', 'size', 'quantity', 'initial_quantity', 'sold', 'in_stock', 'label_printed', 'batch']
         read_only_fields = ['code', 'size', 'initial_quantity', 'label_printed']
+        extra_kwargs = {'quantity': {'max_value': MAX_PAIRS}}
 
     def get_sold(self, entry) -> int:
         return entry.initial_quantity - entry.quantity
@@ -65,9 +78,14 @@ class SizeEntryDetailSerializer(SizeEntrySerializer):
     barcode_svg = serializers.SerializerMethodField()
     recent_sales = serializers.SerializerMethodField()
     last_brand_price = serializers.SerializerMethodField()
+    delivery_sizes = serializers.SerializerMethodField()
 
     class Meta(SizeEntrySerializer.Meta):
-        fields = SizeEntrySerializer.Meta.fields + ['barcode_svg', 'recent_sales', 'last_brand_price']
+        fields = SizeEntrySerializer.Meta.fields + ['barcode_svg', 'recent_sales', 'last_brand_price', 'delivery_sizes']
+
+    def get_delivery_sizes(self, entry) -> int:
+        """Sizes sharing this delivery's brand, price and photo: editing those changes all of them."""
+        return entry.batch.sizes.count()
 
     def get_barcode_svg(self, entry) -> str:
         from .services import barcode_svg
@@ -85,9 +103,38 @@ class SizeEntryDetailSerializer(SizeEntrySerializer):
         )
 
 
+class SizeEntryEditSerializer(serializers.Serializer):
+    """Fixing a product. Send only what changed; a blank `picture` removes the photo."""
+
+    size = serializers.CharField(max_length=10, required=False)
+    quantity = serializers.IntegerField(min_value=0, max_value=MAX_PAIRS, required=False)
+    brand = serializers.CharField(max_length=120, required=False)
+    bought_price = serializers.IntegerField(min_value=1, max_value=MAX_PRICE, required=False)
+    picture = serializers.ImageField(required=False, allow_null=True)
+
+    def validate_size(self, value):
+        value = value.strip()
+        if not SIZE_PATTERN.match(value):
+            raise serializers.ValidationError(_('Enter a size like 41 or 41.5.'))
+        value = value.replace(',', '.')
+        entry = self.context['entry']
+        # Two lines with one size in one delivery would look identical on the shelf.
+        if entry.batch.sizes.exclude(pk=entry.pk).filter(size=value).exists():
+            raise serializers.ValidationError(_('This delivery already has size %(size)s.') % {'size': value})
+        return value
+
+    def validate_brand(self, value):
+        from .services import canonical_brand
+
+        brand = canonical_brand(value, exclude=self.context['entry'].batch)
+        if not brand:
+            raise serializers.ValidationError(_('Enter a brand.'))
+        return brand
+
+
 class SizeRowSerializer(serializers.Serializer):
     size = serializers.CharField(max_length=10)
-    quantity = serializers.IntegerField(min_value=1, max_value=9999)
+    quantity = serializers.IntegerField(min_value=1, max_value=MAX_PAIRS)
 
     def validate_size(self, value):
         value = value.strip()
@@ -117,7 +164,7 @@ class JSONListField(serializers.ListField):
 
 class BatchCreateSerializer(serializers.Serializer):
     brand = serializers.CharField(max_length=120)
-    bought_price = serializers.IntegerField(min_value=1)
+    bought_price = serializers.IntegerField(min_value=1, max_value=MAX_PRICE)
     picture = serializers.ImageField(required=False, allow_null=True)
     sizes = JSONListField(child=SizeRowSerializer(), min_length=1, max_length=40)
 
@@ -134,7 +181,7 @@ class RestockResultSerializer(serializers.Serializer):
 
 
 class SellSerializer(serializers.Serializer):
-    sold_price = serializers.IntegerField(min_value=0)
+    sold_price = serializers.IntegerField(min_value=0, max_value=MAX_PRICE)
     payment = serializers.ChoiceField(choices=Sale.PAYMENT_CHOICES, default=Sale.CASH)
 
 
@@ -148,8 +195,19 @@ class LabelItemSerializer(serializers.Serializer):
     copies = serializers.IntegerField(min_value=1, max_value=500, default=1)
 
 
+# One PDF of 2000 labels is ~75 pages; much more ties the server up for minutes.
+MAX_LABELS_PER_SHEET = 2000
+
+
 class LabelSheetSerializer(serializers.Serializer):
     items = LabelItemSerializer(many=True, allow_empty=False, max_length=500)
+
+    def validate_items(self, items):
+        if sum(item['copies'] for item in items) > MAX_LABELS_PER_SHEET:
+            raise serializers.ValidationError(
+                _('At most %(max)d labels per PDF. Lower the copies or print in parts.') % {'max': MAX_LABELS_PER_SHEET},
+            )
+        return items
 
 
 class DayQuerySerializer(serializers.Serializer):

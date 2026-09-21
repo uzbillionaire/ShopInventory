@@ -1,3 +1,5 @@
+import { syncClock } from '../lib/clock'
+
 const TOKENS_KEY = 'shop.tokens'
 const BASE = import.meta.env.VITE_API_BASE ?? '/api'
 
@@ -111,6 +113,7 @@ async function send(path: string, init: RequestOptions, retry = true): Promise<R
   }
 
   const response = await fetch(`${BASE}${path}`, { method: init.method ?? 'GET', headers, body })
+  syncClock(response.headers.get('Date'))
   if (response.status === 401 && retry && access) {
     if (await refreshAccess()) return send(path, init, false)
     tokens.set(null)
@@ -156,5 +159,15 @@ export async function login(username: string, password: string) {
 }
 
 export function logout() {
+  const current = tokens.get()
   tokens.set(null)
+  // Cancel the refresh token on the server too, so a copy of it can't be used later.
+  // Logged out on this phone either way, even if the network call fails.
+  if (current) {
+    void fetch(`${BASE}/auth/logout/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh: current.refresh }),
+    }).catch(() => {})
+  }
 }

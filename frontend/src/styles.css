@@ -223,6 +223,19 @@ select.input {
 .size-row .field-error { grid-column: 1 / -1; }
 .add-size { margin-top: 10px; }
 
+.edit-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.edit-row .field { margin-bottom: 0; }
+.edit-hint { display: block; margin: 6px 0 20px; }
+.delivery-fieldset { border: 0; padding: 0; margin: 0 0 12px; }
+.delivery-fieldset .notice { margin-bottom: 14px; background: var(--tile-soft); color: var(--ink); font-weight: 400; }
+.danger-zone { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--rule); }
+.danger-zone p { margin: 0 0 12px; }
+.danger-zone .secondary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.button.danger { background: var(--red); border-color: var(--red); color: #fff; }
+.button.danger:hover { filter: brightness(0.92); }
+.button.ghost.danger-outline { color: var(--red); border-color: color-mix(in srgb, var(--red) 35%, transparent); }
+.button.ghost.danger-outline:hover { border-color: var(--red); }
+
 .form-footer {
   position: sticky; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
   margin: 24px calc(-1 * var(--gutter)) 0; padding: 12px var(--gutter);
@@ -317,6 +330,7 @@ select.input {
 .tag-size { text-align: right; }
 .tag-size small { display: block; color: var(--muted); font-size: 13px; font-weight: 500; }
 .tag-size b { display: block; font: 700 clamp(64px, 22vw, 112px)/.9 var(--display); letter-spacing: -0.06em; }
+.tag-size b.long { font-size: clamp(44px, 14vw, 76px); }
 
 .tag-count { display: flex; align-items: baseline; gap: 10px; margin: 18px 0 20px; flex-wrap: wrap; }
 .tag-count b { font: 700 40px/1 var(--display); letter-spacing: -0.03em; }

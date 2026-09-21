@@ -70,6 +70,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
+    # Remembers cancelled refresh tokens, so logging out or changing a password really ends a session.
+    'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'drf_spectacular',
     'inventory',
@@ -190,7 +192,23 @@ STORAGES = {
     },
 }
 
+# How many proxies sit in front of Django (on the server: Caddy, then nginx). The login limit
+# counts attempts per visitor IP, and this tells it which X-Forwarded-For entry is the real
+# visitor, so a faked header cannot dodge the limit. 0 = no proxy (local development).
+PROXY_COUNT = int(os.environ.get('DJANGO_PROXY_COUNT', '0' if DEBUG else '2'))
+
+# Login limits are counted in the cache. gunicorn runs several processes, and a per-process
+# memory cache would give each its own count, so production shares one on disk.
+if not DEBUG:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+            'LOCATION': os.environ.get('DJANGO_CACHE_DIR', '/tmp/shopinventory-cache'),
+        },
+    }
+
 REST_FRAMEWORK = {
+    'NUM_PROXIES': PROXY_COUNT,
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
@@ -213,6 +231,8 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
     'ROTATE_REFRESH_TOKENS': True,
+    # A used refresh token stops working, so a copied one is useless once the app refreshes.
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 
 SPECTACULAR_SETTINGS = {
@@ -220,6 +240,12 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
+    # The API map is for the owner only: log in at /admin/ first, then open /api/docs/.
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.IsAdminUser'],
+    'SERVE_AUTHENTICATION': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
 }
 
 # The React dev server (Vite) runs on :5173.

@@ -1,3 +1,5 @@
+import { shopToday } from './clock'
+
 const NBSP = ' '
 
 /**
@@ -19,6 +21,9 @@ export function som(value: number, unit: string): string {
 }
 
 /** Strips separators a person typed: "250 000" -> 250000. */
+// Matches the server's limit; a few extra zeros typed by mistake stop here with a clear message.
+export const MAX_PRICE = 1_000_000_000
+
 export function parseMoney(value: string): number | null {
   const digits = value.replace(/\D/g, '')
   return digits ? Number(digits) : null
@@ -41,10 +46,9 @@ export function isoDay(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+/** The shop's date n days before today. */
 export function daysAgo(n: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return isoDay(d)
+  return shiftDay(shopToday(), -n)
 }
 
 const WEEKDAYS = {
@@ -63,7 +67,7 @@ export function shiftDay(day: string, n: number): string {
 export function dayLabel(day: string, lang: 'uz' | 'ru', today: string, yesterday: string): string {
   const d = new Date(`${day}T12:00:00`)
   const numeric = date(`${day}T12:00:00`)
-  const now = isoDay(new Date())
+  const now = shopToday()
   if (day === now) return `${today}, ${numeric}`
   if (day === shiftDay(now, -1)) return `${yesterday}, ${numeric}`
   return `${numeric}, ${WEEKDAYS[lang][d.getDay()]}`

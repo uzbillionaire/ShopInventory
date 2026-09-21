@@ -4,6 +4,7 @@ import { useAuth } from './auth'
 import Layout from './components/Layout'
 import AddStock from './pages/AddStock'
 import DailyReport from './pages/DailyReport'
+import EditEntry from './pages/EditEntry'
 import Entry from './pages/Entry'
 import Export from './pages/Export'
 import Home from './pages/Home'
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="add" element={<AddStock />} />
         <Route path="e/:code" element={<Entry />} />
         <Route path="e/:code/sell" element={<Sell />} />
+        <Route path="e/:code/edit" element={<EditEntry />} />
         <Route path="scan" element={<Suspense fallback={<Loading />}><Scan /></Suspense>} />
         <Route path="labels" element={<Labels />} />
         <Route path="stats" element={<Stats />} />

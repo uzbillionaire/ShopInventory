@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db import transaction
 from django.db.models import F
 
 from .models import Batch, Restock, Sale, SizeEntry
@@ -36,11 +37,14 @@ class SaleAdmin(admin.ModelAdmin):
     date_hierarchy = 'sold_at'
     list_select_related = ['size_entry__batch']
 
+    @transaction.atomic
     def delete_model(self, request, obj):
-        # Deleting a mistaken sale puts the pair back on the shelf.
+        # Deleting a mistaken sale puts the pair back on the shelf. Both happen or neither does,
+        # so a failed delete can never leave an extra pair in stock.
         SizeEntry.objects.filter(pk=obj.size_entry_id).update(quantity=F('quantity') + 1)
         super().delete_model(request, obj)
 
+    @transaction.atomic
     def delete_queryset(self, request, queryset):
         for sale in queryset:
             self.delete_model(request, sale)

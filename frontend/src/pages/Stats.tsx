@@ -5,14 +5,15 @@ import type { Ranking } from '../api/types'
 import { ErrorNotice, Loading, SizeChip } from '../components/ui'
 import { PaymentSplit, SummaryGroup } from '../components/Summary'
 import { useI18n, type MessageKey } from '../i18n'
-import { date, daysAgo, isoDay, som, spaced } from '../lib/format'
+import { useShopToday } from '../lib/clock'
+import { date, daysAgo, som, spaced } from '../lib/format'
 
 const PRESETS: [MessageKey, number][] = [['daily', 1], ['days7', 7], ['days30', 30]]
 
 export default function Stats() {
   const { t, lang } = useI18n()
   const [params, setParams] = useSearchParams()
-  const today = isoDay(new Date())
+  const today = useShopToday()
   const start = params.get('start') ?? today
   const end = params.get('end') ?? today
   const slowDays = Number(params.get('slow_days') ?? 30)

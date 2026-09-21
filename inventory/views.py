@@ -3,7 +3,6 @@ import io
 from collections import defaultdict
 from datetime import timedelta
 
-from django.db import transaction
 from django.db.models import Count, F, Max, Min, ProtectedError, Sum
 from django.http import HttpResponse
 from django.utils import timezone
@@ -20,12 +19,13 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from . import reports, services, stats
+from .security import excel_safe
 from .filters import SaleFilter, SizeEntryFilter
 from .models import Batch, Sale, SizeEntry
 from .serializers import (
     BatchCreateSerializer, BatchSerializer, BrandGroupSerializer, DateRangeSerializer, DayQuerySerializer, LabelSheetSerializer,
-    RestockResultSerializer, SaleSerializer, SellResultSerializer, SellSerializer, SizeEntryDetailSerializer, SizeEntrySerializer,
-    UserSerializer,
+    RestockResultSerializer, SaleSerializer, SellResultSerializer, SellSerializer, SizeEntryDetailSerializer, SizeEntryEditSerializer,
+    SizeEntrySerializer, UserSerializer,
 )
 
 # The list's sort options, applied to whole brands instead of single size lines.
@@ -104,6 +104,7 @@ class SizeEntryViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, mixin
 
     queryset = SizeEntry.objects.select_related('batch')
     lookup_field = 'code'
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
     filterset_class = SizeEntryFilter
     ordering_fields = ['batch__date_added', 'quantity', 'batch__bought_price', 'batch__brand', 'size']
     ordering = ['-batch__date_added', 'batch__brand', 'size']
@@ -117,16 +118,19 @@ class SizeEntryViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, mixin
         self.kwargs[self.lookup_field] = self.kwargs[self.lookup_field].strip().upper()
         return super().get_object()
 
-    def perform_update(self, serializer):
-        # Correcting the count (a lost or miscounted pair) must not look like a sale.
-        entry = serializer.instance
-        delta = serializer.validated_data.get('quantity', entry.quantity) - entry.quantity
-        with transaction.atomic():
-            serializer.save(initial_quantity=max(0, entry.initial_quantity + delta))
+    @extend_schema(request=SizeEntryEditSerializer, responses=SizeEntrySerializer)
+    def partial_update(self, request, *args, **kwargs):
+        """Fix a product. Brand, price and photo change for every size of its delivery."""
+        entry = self.get_object()
+        data = SizeEntryEditSerializer(data=request.data, context={'entry': entry})
+        data.is_valid(raise_exception=True)
+        entry = services.edit_entry(entry, data.validated_data)
+        return Response(SizeEntrySerializer(entry, context=self.get_serializer_context()).data)
 
     def destroy(self, request, *args, **kwargs):
         try:
-            return super().destroy(request, *args, **kwargs)
+            services.delete_entry(self.get_object())
+            return Response(status=status.HTTP_204_NO_CONTENT)
         except ProtectedError:
             return Response({'detail': _('This size already has sales, so it can’t be deleted.')},
                             status=status.HTTP_409_CONFLICT)
@@ -269,6 +273,8 @@ class ExportView(APIView):
             ]
             name = f'sales-{start:%Y-%m-%d}-{end:%Y-%m-%d}'
 
+        # Brands are typed by people; "=..." must stay text, not become a spreadsheet formula.
+        rows = [[excel_safe(value) for value in row] for row in rows]
         if fmt == 'xlsx':
             from openpyxl import Workbook
             from openpyxl.styles import Font
@@ -338,7 +344,7 @@ class DailyReportExportView(APIView):
         sales.append([_('Time'), _('Code'), _('Brand'), _('Size'), _('Bought price'), _('Sold price'), _('Profit'), _('Payment')])
         for sale in report['sales_list']:
             entry = sale.size_entry
-            sales.append([timezone.localtime(sale.sold_at).strftime('%H:%M'), entry.code, entry.batch.brand, entry.size,
+            sales.append([timezone.localtime(sale.sold_at).strftime('%H:%M'), entry.code, excel_safe(entry.batch.brand), entry.size,
                           entry.batch.bought_price, sale.sold_price, sale.profit, sale.get_payment_display()])
         paid = report['by_payment']
         sales.append([_('Cash'), '', '', '', '', paid['cash']])
@@ -349,7 +355,7 @@ class DailyReportExportView(APIView):
         received = book.create_sheet(_('Received'))
         received.append([_('Code'), _('Brand'), _('Size'), _('Pairs'), _('Bought price'), _('Value')])
         for row in report['received']:
-            received.append([row['code'], row['brand'], row['size'], row['quantity'], row['bought_price'],
+            received.append([row['code'], excel_safe(row['brand']), row['size'], row['quantity'], row['bought_price'],
                              row['quantity'] * row['bought_price']])
         received.append([_('Total'), '', '', report['received_summary']['pairs'], '', report['received_summary']['value']])
 

@@ -25,6 +25,18 @@ def normalize_brand(brand):
     return re.sub(r'\s+', ' ', brand).strip()
 
 
+def canonical_brand(brand, exclude=None):
+    """One spelling per brand: "skechers  go walk" becomes the existing "Skechers Go Walk".
+
+    `exclude` is the delivery being renamed, so it doesn't match its own old spelling.
+    """
+    brand = normalize_brand(brand)
+    known = Batch.objects.filter(brand__iexact=brand)
+    if exclude is not None:
+        known = known.exclude(pk=exclude.pk)
+    return known.order_by('date_added').values_list('brand', flat=True).first() or brand
+
+
 def normalize_size(size):
     return size.strip().replace(',', '.')
 
@@ -51,10 +63,7 @@ def add_stock(brand, bought_price, rows, picture=None):
     becomes a new size line with a new code, so stock bought at different
     prices never shares a line and profit stays accurate.
     """
-    brand = normalize_brand(brand)
-    # Keep one spelling per brand: "skechers go walk" joins existing "Skechers Go Walk".
-    known = Batch.objects.filter(brand__iexact=brand).order_by('date_added').values_list('brand', flat=True).first()
-    brand = known or brand
+    brand = canonical_brand(brand)
     totals = {}
     for size, quantity in rows:
         size = normalize_size(size)
@@ -92,6 +101,69 @@ def add_stock(brand, bought_price, rows, picture=None):
 
     Restock.objects.bulk_create(Restock(size_entry=line.entry, quantity=line.added) for line in lines)
     return RestockResult(batch=batch, lines=lines)
+
+
+def _delete_file_later(field_file):
+    """Remove a replaced photo from disk, but only once the database change has really been saved."""
+    if field_file:
+        storage, name = field_file.storage, field_file.name
+        transaction.on_commit(lambda: storage.delete(name))
+
+
+@transaction.atomic
+def edit_entry(entry, changes):
+    """Fix a mistake on one product.
+
+    Size and pair count belong to this line only. Brand, price and photo belong
+    to the whole delivery, so every size bought with it changes too. Size and
+    brand are printed on the label, so changed lines go back on the to-print list.
+    """
+    entry = SizeEntry.objects.select_for_update().select_related('batch').get(pk=entry.pk)
+    batch = entry.batch
+
+    batch_fields = []
+    if 'brand' in changes and changes['brand'] != batch.brand:
+        batch.brand = changes['brand']
+        batch_fields.append('brand')
+        batch.sizes.update(label_printed=False)
+        entry.label_printed = False
+    if 'bought_price' in changes and changes['bought_price'] != batch.bought_price:
+        batch.bought_price = changes['bought_price']
+        batch_fields.append('bought_price')
+    if 'picture' in changes:
+        _delete_file_later(batch.picture)
+        batch.picture = changes['picture'] or ''
+        batch_fields.append('picture')
+    if batch_fields:
+        batch.save(update_fields=batch_fields)
+
+    entry_fields = []
+    if 'quantity' in changes:
+        # Correcting the count (a lost or miscounted pair) must not look like a sale.
+        delta = changes['quantity'] - entry.quantity
+        entry.quantity = changes['quantity']
+        entry.initial_quantity = max(0, entry.initial_quantity + delta)
+        entry_fields += ['quantity', 'initial_quantity']
+    if 'size' in changes and changes['size'] != entry.size:
+        entry.size = changes['size']
+        entry.label_printed = False
+        entry_fields += ['size', 'label_printed']
+    if entry_fields:
+        entry.save(update_fields=entry_fields)
+    return entry
+
+
+@transaction.atomic
+def delete_entry(entry):
+    """Delete a product with no sales. A delivery left with no sizes goes too, photo included.
+
+    Raises ProtectedError if the line has sales.
+    """
+    batch = entry.batch
+    entry.delete()
+    if not batch.sizes.exists():
+        _delete_file_later(batch.picture)
+        batch.delete()
 
 
 @transaction.atomic

@@ -48,6 +48,8 @@ export interface SizeEntryDetail extends SizeEntry {
   barcode_svg: string
   recent_sales: Sale[]
   last_brand_price: number | null
+  /** Sizes sharing this delivery's brand, price and photo. */
+  delivery_sizes: number
 }
 
 export interface Page<T> {

@@ -3,14 +3,15 @@ import { useLowStock, useStats } from '../api/hooks'
 import { PlusIcon, ScanIcon } from '../components/Icons'
 import { ErrorNotice, Loading, SizeChip } from '../components/ui'
 import { useI18n } from '../i18n'
-import { date, isoDay, som, spaced } from '../lib/format'
+import { useShopToday } from '../lib/clock'
+import { date, som, spaced } from '../lib/format'
 
 // Enough to act on at a glance; the full list is one tap away.
 const LOW_STOCK_SHOWN = 6
 
 export default function Home() {
   const { t } = useI18n()
-  const today = isoDay(new Date())
+  const today = useShopToday()
   const stats = useStats({ start: today, end: today })
   const low = useLowStock()
   const unit = t('som')

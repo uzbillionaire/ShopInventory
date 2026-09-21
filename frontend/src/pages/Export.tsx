@@ -4,13 +4,14 @@ import { download } from '../api/client'
 import { BackIcon } from '../components/Icons'
 import { useToast } from '../components/ui'
 import { useI18n } from '../i18n'
-import { daysAgo, isoDay } from '../lib/format'
+import { useShopToday } from '../lib/clock'
+import { daysAgo } from '../lib/format'
 
 export default function Export() {
   const { t } = useI18n()
   const navigate = useNavigate()
   const toast = useToast()
-  const today = isoDay(new Date())
+  const today = useShopToday()
   const [start, setStart] = useState(daysAgo(364))
   const [end, setEnd] = useState(today)
   const [busy, setBusy] = useState<string | null>(null)
